@@ -34,6 +34,7 @@ optimal_tol_rel = get_attribute.((EP[i] for i in 1:multistage_setup["NumStages"]
 optimal_tol = optimal_tol_rel .* obj_test  # Convert to absolute tolerance
 
 # Test the objective value
+@info "Multi-stage objective comparison" obj_test obj_true optimal_tol_rel optimal_tol
 test_result = @test all(obj_true .- optimal_tol .<= obj_test .<= obj_true .+ optimal_tol)
 
 # Round objective value and tolerance. Write to test log.
