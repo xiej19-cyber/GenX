@@ -45,9 +45,11 @@ function load_operational_reserves!(setup::Dict, path::AbstractString, inputs::D
             reserve_regions == collect(1:length(reserve_regions)) || error(
                 "Reserve_Region values must be consecutive integers 1:$(length(reserve_regions))")
             parse_zones(value) = begin
-                # Julia 1.6 cannot apply multi-pair `replace` directly to a SubString.
-                normalized = replace(String(strip(string(value))),
-                    '“' => '"', '”' => '"', '；' => ';')
+                # Use String-to-String replacements for Julia 1.6 compatibility.
+                normalized = String(strip(string(value)))
+                normalized = replace(normalized, "“" => "\"")
+                normalized = replace(normalized, "”" => "\"")
+                normalized = replace(normalized, "；" => ";")
                 normalized = replace(normalized, "\"" => "")
                 tokens = split(normalized, r"[;|[:space:]]+")
                 isempty(tokens) || all(x -> !isempty(x), tokens) ||
