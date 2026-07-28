@@ -278,8 +278,9 @@ function operational_reserves_core!(EP::Model, inputs::Dict, setup::Dict)
     T = inputs["T"]     # Number of time steps (hours)
     Z = inputs["Z"]
     zonal_reserves = setup["OperationalReserves"] == 2
-    reserve_zones = inputs["OPERATIONAL_RESERVE_REGIONS"]
-    region_zones = inputs["OPERATIONAL_RESERVE_REGION_ZONES"]
+    reserve_zones = zonal_reserves ? inputs["OPERATIONAL_RESERVE_REGIONS"] : Int[]
+    region_zones = zonal_reserves ? inputs["OPERATIONAL_RESERVE_REGION_ZONES"] :
+                   Dict{Int, Vector{Int}}()
     custom_regions = zonal_reserves && inputs["OPERATIONAL_RESERVE_CUSTOM_REGIONS"]
 
     REG = inputs["REG"]
