@@ -30,6 +30,7 @@ Additionally, the user may need to specify eight more **settings-specific** inpu
 7. Vre\_and\_stor\_solar\_variability.csv: specify time-series of capacity factor/availability for each solar PV resource that exists for every co-located VRE and storage resource (in DC terms).
 8. Vre\_and\_stor\_wind\_variability.csv: specify time-series of capacity factor/availability for each wind resource that exists for every co-located VRE and storage resource (in AC terms).
 9. Hydrogen\_demand.csv: specify regional hydrogen production requirements.
+10. Minimum\_commitment.csv: optionally specify zonal, hourly minimum online-capacity fractions for selected thermal resources with unit commitment.
 
 
 !!! note "Note"
@@ -666,6 +667,23 @@ This file contains the time-series of capacity factors / availability of each re
 
 1) First column: The first column contains the time index of each row (starting in the second row) from 1 to N.
 2) Second column onwards: Resources are listed from the second column onward with headers matching each resource name in the resource `.csv` file in the   `resources` folder in any order. The availability for each resource at each time step is defined as a fraction of installed capacity and should be between 0 and 1. Note that for this reason, resource names specified in the resource `.csv` file must be unique. Note that for Hydro reservoir resources (i.e. `Hydro.csv`), values in this file correspond to inflows (in MWhs) to the hydro reservoir as a fraction of installed power capacity, rather than hourly capacity factor. Note that for co-located VRE and storage resources, solar PV and wind resource profiles should not be located in this file but rather in separate variability files (these variabilities can be in the `Generators_variability.csv` if time domain reduction functionalities will be utilized because the time domain reduction functionalities will separate the files after the clustering is completed).
+
+#### 1.5.1 Minimum\_commitment.csv (optional)
+
+This optional file imposes a zonal, hourly lower bound on aggregate online capacity for selected thermal resources with `Model = 1` when `UCommit >= 1`. The first column is `Time_Index`; subsequent columns are named `Zone_1`, `Zone_2`, ..., `Zone_Z`. Values are fractions between 0 and 1, and omitted zones are unconstrained.
+
+Add a `Minimum_Commitment` column to `Thermal.csv`. Set it to `1` for the coal resources included in the zonal constraint and `0` for all other resources. For example, `Zone_1 = 0.7` requires the aggregate committed capacity of marked resources in Zone 1 to be at least 70% of their aggregate installed capacity. Mathematically, GenX enforces `sum(Cap_Size[y] * vCOMMIT[y,t]) >= fraction[z,t] * sum(eTotalCap[y])` over the marked resources in each zone. This constrains online capacity rather than generation output `vP`. With `UCommit = 2`, committed capacity is continuous, so the constraint does not require an integer number of units.
+
+Example:
+
+```csv
+Time_Index,Zone_1,Zone_2
+1,0.70,0.60
+2,0.70,0.60
+3,0.65,0.50
+```
+
+Place the full-resolution input in the configured system-data directory, normally `system/Minimum_commitment.csv`. Without time-domain reduction, GenX reads this file directly. When TDR is run, GenX extracts the same representative-period rows used for the other hourly inputs and writes the aligned profile into the TDR output directory automatically; users should not prepare that reduced file manually. The active file must contain exactly one row per model time step. The file is optional; if absent, GenX applies no additional minimum commitment constraints.
 
 ###### Table 21: Structure of the Generator\_variability.csv file
 ---

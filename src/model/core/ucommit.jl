@@ -71,5 +71,36 @@ function ucommit!(EP::Model, inputs::Dict, setup::Dict)
             end
         end
     end #END unit commitment configuration
+
+    minimum_commitment!(EP, inputs)
+    return EP
+end
+
+@doc raw"""
+	minimum_commitment!(EP::Model, inputs::Dict)
+
+Enforce an exogenous, time-varying lower bound on aggregate committed capacity
+for selected thermal resources in each zone:
+
+```math
+\sum_{y \in H_z} \Omega^{size}_y \nu_{y,t}
+\geq \underline{f}_{z,t} \sum_{y \in H_z} \Delta^{total}_y
+```
+
+Here `pMinimumCommitment[z,t]` is a fraction of the total installed capacity of
+resources marked `Minimum_Commitment = 1`. This constrains online capacity, not
+the power-output variable. A zero profile leaves a zone unconstrained.
+"""
+function minimum_commitment!(EP::Model, inputs::Dict)
+    zones = get(inputs, "MINIMUM_COMMITMENT_ZONES", Int[])
+    isempty(zones) && return EP
+
+    T = inputs["T"]
+    profile = inputs["pMinimumCommitment"]
+    gen = inputs["RESOURCES"]
+    resources_by_zone = inputs["MINIMUM_COMMITMENT_BY_ZONE"]
+    @constraint(EP, cMinimumCommitment[z in zones, t in 1:T],
+        sum(cap_size(gen[y]) * EP[:vCOMMIT][y, t] for y in resources_by_zone[z]) >=
+        profile[z, t] * sum(EP[:eTotalCap][y] for y in resources_by_zone[z]))
     return EP
 end

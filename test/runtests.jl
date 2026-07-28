@@ -8,6 +8,10 @@ include("utilities.jl")
     include("expression_manipulation_test.jl")
 end
 
+@testset "Minimum commitment" begin
+    include("test_minimum_commitment.jl")
+end
+
 if VERSION ≥ v"1.7"
     @testset "Resource loading" begin
         include("test_load_resource_data.jl")

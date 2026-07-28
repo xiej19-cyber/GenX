@@ -35,6 +35,8 @@ function load_inputs(setup::Dict, path::AbstractString)
     load_resources_data!(inputs, setup, path, resources_path)
     # Read in generator/resource availability profiles
     load_generators_variability!(setup, path, inputs)
+    # Read optional hourly lower bounds on the number of committed units
+    load_minimum_commitment!(setup, path, inputs)
 
     validatetimebasis(inputs)
 
