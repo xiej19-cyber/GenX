@@ -45,7 +45,9 @@ function load_operational_reserves!(setup::Dict, path::AbstractString, inputs::D
             reserve_regions == collect(1:length(reserve_regions)) || error(
                 "Reserve_Region values must be consecutive integers 1:$(length(reserve_regions))")
             parse_zones(value) = begin
-                normalized = replace(strip(string(value)),
+                # Materialize a String because Julia 1.6 cannot apply Char-pair
+                # replacement directly to the SubString returned by strip.
+                normalized = replace(String(strip(string(value))),
                     '“' => '"', '”' => '"', '；' => ';')
                 normalized = replace(normalized, "\"" => "")
                 tokens = split(normalized, r"[;|[:space:]]+")
@@ -202,7 +204,14 @@ function load_operational_reserves!(setup::Dict, path::AbstractString, inputs::D
         end
     else
         inputs["OPERATIONAL_RESERVE_ZONES"] = collect(1:inputs["Z"])
+        # Initialize the region metadata used by the common reserve core even
+        # though system-wide reserves do not index constraints by region.
+        inputs["OPERATIONAL_RESERVE_REGIONS"] = [1]
+        inputs["OPERATIONAL_RESERVE_REGION_ZONES"] = Dict(1 => collect(1:inputs["Z"]))
+        inputs["OPERATIONAL_RESERVE_RESOURCE_REGION"] = ones(Int, length(gen))
+        inputs["OPERATIONAL_RESERVE_CUSTOM_REGIONS"] = false
         inputs["OPERATIONAL_RESERVE_TRANSFER_LINES"] = Int[]
+        inputs["OPERATIONAL_RESERVE_TRANSFER_REGION"] = Dict{Int, Int}()
         inputs["pReg_Req_Demand"] = load_field_with_deprecated_symbol(res_in,
             [:Reg_Req_Percent_Demand, :Reg_Req_Percent_Load])
         inputs["pReg_Req_VRE"] = float(res_in[1, :Reg_Req_Percent_VRE])
