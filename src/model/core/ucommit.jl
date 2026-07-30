@@ -92,15 +92,27 @@ resources marked `Minimum_Commitment = 1`. This constrains online capacity, not
 the power-output variable. A zero profile leaves a zone unconstrained.
 """
 function minimum_commitment!(EP::Model, inputs::Dict)
-    zones = get(inputs, "MINIMUM_COMMITMENT_ZONES", Int[])
-    isempty(zones) && return EP
+    coal_zones = get(inputs, "MINIMUM_COMMITMENT_ZONES", Int[])
+    gas_zones = get(inputs, "MINIMUM_COMMITMENT_GAS_ZONES", Int[])
+    isempty(coal_zones) && isempty(gas_zones) && return EP
 
     T = inputs["T"]
-    profile = inputs["pMinimumCommitment"]
     gen = inputs["RESOURCES"]
-    resources_by_zone = inputs["MINIMUM_COMMITMENT_BY_ZONE"]
-    @constraint(EP, cMinimumCommitment[z in zones, t in 1:T],
-        sum(cap_size(gen[y]) * EP[:vCOMMIT][y, t] for y in resources_by_zone[z]) >=
-        profile[z, t] * sum(EP[:eTotalCap][y] for y in resources_by_zone[z]))
+
+    if !isempty(coal_zones)
+        profile = inputs["pMinimumCommitment"]
+        resources_by_zone = inputs["MINIMUM_COMMITMENT_BY_ZONE"]
+        @constraint(EP, cMinimumCommitment[z in coal_zones, t in 1:T],
+            sum(cap_size(gen[y]) * EP[:vCOMMIT][y, t] for y in resources_by_zone[z]) >=
+            profile[z, t] * sum(EP[:eTotalCap][y] for y in resources_by_zone[z]))
+    end
+
+    if !isempty(gas_zones)
+        profile = inputs["pMinimumCommitmentGas"]
+        resources_by_zone = inputs["MINIMUM_COMMITMENT_GAS_BY_ZONE"]
+        @constraint(EP, cMinimumCommitmentGas[z in gas_zones, t in 1:T],
+            sum(cap_size(gen[y]) * EP[:vCOMMIT][y, t] for y in resources_by_zone[z]) >=
+            profile[z, t] * sum(EP[:eTotalCap][y] for y in resources_by_zone[z]))
+    end
     return EP
 end

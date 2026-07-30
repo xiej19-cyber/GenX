@@ -678,7 +678,7 @@ end
     write_tdr_minimum_commitment_from_raw(raw_system_dir, output_dir, M,
         TimestepsPerRepPeriod)
 
-If the optional full-resolution `Minimum_commitment.csv` exists, extract the
+If the optional full-resolution minimum-commitment profile exists, extract the
 selected representative periods and write an aligned copy to the TDR output
 directory. Users therefore maintain only the raw system input.
 """
@@ -686,8 +686,8 @@ function write_tdr_minimum_commitment_from_raw(
         raw_system_dir::String,
         output_dir::String,
         M,
-        TimestepsPerRepPeriod::Int)
-    filename = "Minimum_commitment.csv"
+        TimestepsPerRepPeriod::Int;
+        filename::String = "Minimum_commitment_coal.csv")
     raw_path = joinpath(raw_system_dir, filename)
     isfile(raw_path) || return nothing
 
@@ -712,8 +712,8 @@ function write_tdr_minimum_commitment_from_raw_multistage_concat(
         NumStages::Int,
         output_dir::String,
         M,
-        TimestepsPerRepPeriod::Int)
-    filename = "Minimum_commitment.csv"
+        TimestepsPerRepPeriod::Int;
+        filename::String = "Minimum_commitment_coal.csv")
     raw_profiles = DataFrame[]
     expected_columns = nothing
     found_file = false
@@ -1558,9 +1558,11 @@ function cluster_inputs(inpath,
                     TimestepsPerRepPeriod;
                     v = v
                 )
-                write_tdr_minimum_commitment_from_raw_multistage_concat(
-                    inpath, mysetup, NumStages, dirname(out_gvar_path), M,
-                    TimestepsPerRepPeriod)
+                for filename in ("Minimum_commitment_coal.csv", "Minimum_commitment_gas.csv")
+                    write_tdr_minimum_commitment_from_raw_multistage_concat(
+                        inpath, mysetup, NumStages, dirname(out_gvar_path), M,
+                        TimestepsPerRepPeriod; filename = filename)
+                end
 
                 # Keep this for the VRE-STOR block below.
                 # The following VRE-STOR logic uses NewGVColNames to identify solar/wind columns.
@@ -1709,9 +1711,11 @@ function cluster_inputs(inpath,
                 TimestepsPerRepPeriod;
                 v = v
             )
-            write_tdr_minimum_commitment_from_raw(
-                dirname(raw_gvar_path), dirname(out_gvar_path), M,
-                TimestepsPerRepPeriod)
+            for filename in ("Minimum_commitment_coal.csv", "Minimum_commitment_gas.csv")
+                write_tdr_minimum_commitment_from_raw(
+                    dirname(raw_gvar_path), dirname(out_gvar_path), M,
+                    TimestepsPerRepPeriod; filename = filename)
+            end
 
             NewGVColNames = names(GVOutputData)
 
@@ -1860,9 +1864,11 @@ function cluster_inputs(inpath,
             TimestepsPerRepPeriod;
             v = v
         )
-        write_tdr_minimum_commitment_from_raw(
-            dirname(raw_gvar_path), dirname(out_gvar_path), M,
-            TimestepsPerRepPeriod)
+        for filename in ("Minimum_commitment_coal.csv", "Minimum_commitment_gas.csv")
+            write_tdr_minimum_commitment_from_raw(
+                dirname(raw_gvar_path), dirname(out_gvar_path), M,
+                TimestepsPerRepPeriod; filename = filename)
+        end
 
         NewGVColNames = names(GVOutputData)
 

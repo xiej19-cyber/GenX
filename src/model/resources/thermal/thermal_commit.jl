@@ -136,6 +136,7 @@ function thermal_commit!(EP::Model, inputs::Dict, setup::Dict)
     p = inputs["hours_per_subperiod"] #total number of hours per subperiod
 
     THERM_COMMIT = inputs["THERM_COMMIT"]
+    min_power_at(y, t) = inputs["pP_Min"][y, t]
 
     ### Expressions ###
 
@@ -193,10 +194,10 @@ function thermal_commit!(EP::Model, inputs::Dict, setup::Dict)
                              (EP[:vCOMMIT][y, t] - EP[:vSTART][y, t])
                              +
                              min(inputs["pP_Max"][y, t],
-                                 max(min_power(gen[y]), ramp_up_fraction(gen[y]))) *
+                                 max(min_power_at(y, t), ramp_up_fraction(gen[y]))) *
                              cap_size(gen[y]) * EP[:vSTART][y, t]
                              -
-                             min_power(gen[y]) * cap_size(gen[y]) * EP[:vSHUT][y, t])
+                             min_power_at(y, t) * cap_size(gen[y]) * EP[:vSHUT][y, t])
 
     # rampdown constraints
     @constraint(EP, [y in THERM_COMMIT, t in 1:T],
@@ -205,10 +206,10 @@ function thermal_commit!(EP::Model, inputs::Dict, setup::Dict)
             hoursbefore(p, t, 1)]<=ramp_down_fraction(gen[y]) * cap_size(gen[y]) *
                                    (EP[:vCOMMIT][y, t] - EP[:vSTART][y, t])
                                    -
-                                   min_power(gen[y]) * cap_size(gen[y]) * EP[:vSTART][y, t]
+                                   min_power_at(y, t) * cap_size(gen[y]) * EP[:vSTART][y, t]
                                    +
                                    min(inputs["pP_Max"][y, t],
-                                       max(min_power(gen[y]), ramp_down_fraction(gen[y]))) *
+                                       max(min_power_at(y, t), ramp_down_fraction(gen[y]))) *
                                    cap_size(gen[y]) * EP[:vSHUT][y, t])
 
     ### Minimum and maximum power output constraints (Constraints #7-8)
@@ -220,7 +221,8 @@ function thermal_commit!(EP::Model, inputs::Dict, setup::Dict)
             begin
                 # Minimum stable power generated per technology "y" at hour "t" > Min power
                 [y in THERM_COMMIT, t = 1:T],
-                EP[:vP][y, t] >= min_power(gen[y]) * cap_size(gen[y]) * EP[:vCOMMIT][y, t]
+                EP[:vP][y, t] >=
+                min_power_at(y, t) * cap_size(gen[y]) * EP[:vCOMMIT][y, t]
 
                 # Maximum power generated per technology "y" at hour "t" < Max power
                 [y in THERM_COMMIT, t = 1:T],
@@ -326,6 +328,7 @@ function thermal_commit_operational_reserves!(EP::Model, inputs::Dict)
 
     commit(y, t) = cap_size(gen[y]) * EP[:vCOMMIT][y, t]
     max_power(y, t) = inputs["pP_Max"][y, t]
+    min_power_at(y, t) = inputs["pP_Min"][y, t]
 
     # Maximum regulation and reserve contributions
     @constraint(EP,
@@ -340,7 +343,7 @@ function thermal_commit_operational_reserves!(EP::Model, inputs::Dict)
     add_similar_to_expression!(expr[REG, :], -1.0, vREG[REG, :])
     @constraint(EP,
         [y in THERM_COMMIT, t in 1:T],
-        expr[y, t]>=min_power(gen[y]) * commit(y, t))
+        expr[y, t]>=min_power_at(y, t) * commit(y, t))
 
     # Maximum power generated per technology "y" at hour "t"  and contribution to regulation and reserves up must be < max power
     expr = extract_time_series_to_expression(vP, THERM_COMMIT)
