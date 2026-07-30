@@ -33,9 +33,9 @@ optimal_tol_rel = get_attribute.((EP[i] for i in 1:multistage_setup["NumStages"]
     "ipm_optimality_tolerance")
 optimal_tol = optimal_tol_rel .* obj_test  # Convert to absolute tolerance
 
-# The exact IPM solution varies slightly across HiGHS releases. Keep this a
-# meaningful objective regression test while allowing 0.05% solver variation.
-regression_tol_rel = 5e-4
+# Keep a small cross-version allowance around the expected objective. The test
+# case uses simplex to avoid platform-dependent IPM stopping points.
+regression_tol_rel = 1e-5
 regression_tol = max.(optimal_tol, regression_tol_rel .* abs.(obj_true))
 test_result = @test all(abs.(obj_test .- obj_true) .<= regression_tol)
 
