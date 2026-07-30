@@ -45,10 +45,11 @@ function load_operational_reserves!(setup::Dict, path::AbstractString, inputs::D
             reserve_regions == collect(1:length(reserve_regions)) || error(
                 "Reserve_Region values must be consecutive integers 1:$(length(reserve_regions))")
             parse_zones(value) = begin
-                # Materialize a String because Julia 1.6 cannot apply Char-pair
-                # replacement directly to the SubString returned by strip.
+                # Use string-to-string replacements for Julia 1.6 compatibility.
+                # Its replace(::String, ::Pair{Char, Char}...) method attempts an
+                # unsupported similar(::String, ::Type{Char}) allocation.
                 normalized = replace(String(strip(string(value))),
-                    '“' => '"', '”' => '"', '；' => ';')
+                    "“" => "\"", "”" => "\"", "；" => ";")
                 normalized = replace(normalized, "\"" => "")
                 tokens = split(normalized, r"[;|[:space:]]+")
                 isempty(tokens) || all(!isempty, tokens) || error("Invalid Zones value: $value")
