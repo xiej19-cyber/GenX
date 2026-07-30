@@ -1,9 +1,5 @@
-"""
-    _load_minimum_commitment_profile(filepath, filename, inputs, resources_by_zone)
-
-Load and validate one zonal hourly minimum-commitment profile. The returned
-matrix has dimensions `Z × T`; omitted zone columns default to zero.
-"""
+# Load and validate one zonal hourly minimum-commitment profile. The returned
+# matrix has dimensions Z × T; omitted zone columns default to zero.
 function _load_minimum_commitment_profile(filepath::AbstractString,
         filename::AbstractString, inputs::Dict, resources_by_zone)
     Z, T = inputs["Z"], inputs["T"]

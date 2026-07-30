@@ -57,6 +57,7 @@ GenX.load_minimum_utilizationrate!
 GenX.load_cap_reserve_margin_multihours_trans!
 GenX.load_cap_reserve_margin_multihours!
 GenX.load_capacity_payment!
+GenX.load_minimum_commitment!
 ```
 
 ## CO$_2$ Emissions Cap
