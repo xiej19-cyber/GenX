@@ -66,8 +66,17 @@ function test_case()
     costs_test = prepare_costs_test(test_path, inputs, genx_setup, EP)
     test_result = @test costs_test[!, Not(:Costs)] ≈ costs_true[!, Not(:Costs)]
 
+    # Test served demand: with no resources, all demand is non-served.
+    settings = GenX.default_settings()
+    merge!(settings, genx_setup)
+    settings["WriteOutputs"] = "annual"
+    GenX.write_demand(test_path, inputs, settings, EP)
+    demand_test = CSV.read(joinpath(test_path, "zonaldemand.csv"), DataFrame)
+    @test demand_test.AnnualSum ≈ [0.0, 0.0, 0.0] atol=1e-4
+
     # Remove the costs file
     rm(joinpath(test_path, "costs.csv"))
+    rm(joinpath(test_path, "zonaldemand.csv"))
 
     return nothing
 end

@@ -12,7 +12,7 @@ function write_demand(path::AbstractString, inputs::Dict, setup::Dict, EP::Model
     demand = zeros(Z,T)
     scale_factor = setup["ParameterScale"] == 1 ? ModelScalingFactor : 1
 
-    demand = transpose(inputs["pD"] .- value.(EP[:eTotalCNSETS])) * scale_factor
+    demand = transpose(inputs["pD"] .- value.(EP[:ePowerBalanceNse])) * scale_factor
 
     dfDemandconsumption.AnnualSum .= demand * inputs["omega"]
 
