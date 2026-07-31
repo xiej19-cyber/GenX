@@ -147,6 +147,10 @@ function write_costs(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
         dfCost[9, 2] += value(EP[:eTotalCH2DemandSlack])
     end
 
+    if setup["LinePowerFlowLimits"] == 1
+        dfCost[9, 2] += line_power_flow_limit_penalty_cost(inputs, EP)
+    end
+
     if !isempty(VRE_STOR)
         dfCost[!, 2][11] = value(EP[:eTotalCGrid]) *
                            (setup["ParameterScale"] == 1 ? ModelScalingFactor^2 : 1)

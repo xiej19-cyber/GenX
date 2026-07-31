@@ -44,6 +44,7 @@ Reports optimal objective function value and contribution of each term by zone.
 | cStart |Total annual cost of start-up of thermal power plants| USD |
 | cUnmetRsv |Total annual cost of not meeting time-dependent operating reserve (spinning) requirements |USD |
 | cNetworkExp |Total cost of network expansion |USD |
+| cUnmetPolicyPenalty |Total penalties for relaxed policy constraints, including optional line-power-limit violations |USD |
 | cEmissionsRevenue |Total and zonal emissions revenue |USD |
 | cEmissionsCost |Total an zonal emissions cost |USD |
 
@@ -157,6 +158,19 @@ This file includes the renewable/clean credit revenue earned by each generator l
 ### 2.8 SubsidyRevenue.csv
 
 This file includes subsidy revenue earned if a generator specified Min\_Cap is provided in the input file. GenX will print this file only the shadow price can be obtained form the solver. Do not confuse this with the Minimum Capacity Carveout constraint, which is for a subset of generators, and a separate revenue term will be calculated in other files. The unit is USD.
+
+### 2.9 line\_power\_flow\_balance.csv
+
+When `LinePowerFlowLimits = 1`, this long-format file reports the profile ID,
+line endpoints, time index, final planned line capacity, per-unit and MW
+bounds, actual signed flow, margins, and any lower or upper violation. Power
+and capacity columns are always restored to MW.
+
+If duals are available, `line_power_flow_limit_prices.csv` reports lower- and
+upper-bound marginal prices in USD/MWh. The reported values remove the
+representative-time weight and objective scale; the upper-bound dual sign is
+reversed so both columns represent the marginal cost of tightening the
+corresponding boundary.
 
 ## 3. Resources-specific outputs
 

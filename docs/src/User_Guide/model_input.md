@@ -65,9 +65,11 @@ This input file contains input parameters related to: 1) definition of model zon
 |**Settings-specific Columns**|
 |**Multiple zone model**||
 |Network\_zones | Unique names for each zone in the model. **Note**: Only the number of zones (i.e., the length of the column) is used; the specific values are not referenced in the model.|
-|Network\_Lines | Numerical index for each network line. **Note**: The length of this column is counted but the actual values are not used.|
+|Network\_Lines | Unique integer identifier for each network line. It is also used to identify lines in line-power-limit slack inputs and outputs when `LinePowerFlowLimits = 1`.|
 | z* (Network map) **OR** Start\_Zone, End\_Zone | See below |
 |Line\_Max\_Flow\_MW | Existing capacity of the inter-regional transmission line.|
+|**LinePowerFlowLimits = 1**||
+|Line\_Power\_Profile\_ID | Case-sensitive reusable profile name, or the exact reserved value `None` for an unconstrained line.|
 |**NetworkExpansion = 1**||
 |Line\_Max\_Reinforcement\_MW |Maximum allowable capacity addition to the existing transmission line.|
 |Line\_Reinforcement\_Cost\_per\_MWyr | Cost of adding new capacity to the inter-regional transmission line.|
@@ -109,6 +111,28 @@ Network_Lines, z1, z2, z3,
 
 Note that in either case, positive flows indicate flow from start to end zone;
 negative flows indicate flow from end to start zone.
+
+When `LinePowerFlowLimits = 1`, `system/Line_power_flow_limits.csv` contains
+`Time_Index` and one pair of columns for every profile referenced by
+`Line_Power_Profile_ID`:
+
+```csv
+Time_Index,西北直流_up,西北直流_down,南方直流A_up,南方直流A_down
+1,0.80,0.30,0.90,0.55
+2,0.85,0.35,0.88,0.50
+```
+
+The loader constructs the column names directly as `<profile>_up` and
+`<profile>_down`; it does not parse suffixes to recover the profile name.
+Names are case-sensitive and may contain Unicode, digits, underscores,
+hyphens, and internal spaces. Empty names, leading or trailing whitespace,
+control characters, and the reserved value `None` as a real profile name are
+not allowed. Multiple lines may reference the same pair of columns.
+
+Every referenced profile must have both columns, and unreferenced profile
+columns are rejected. `Time_Index` must be exactly `1:T`, and all values must
+satisfy `-1 <= down <= up <= 1`. The values are per unit and are not affected
+by `ParameterScale`.
 
 
 ### 1.3 Demand\_data.csv (Load\_data.csv)

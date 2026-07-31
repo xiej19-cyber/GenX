@@ -706,6 +706,40 @@ function write_tdr_minimum_commitment_from_raw(
     return output
 end
 
+"""
+    write_tdr_line_power_flow_limits_from_raw(raw_system_dir, output_dir, M,
+        TimestepsPerRepPeriod, profile_names)
+
+Extract the same representative-period rows selected for demand and generator
+profiles from the full-resolution line power profile file. The line profiles
+are not clustering features.
+"""
+function write_tdr_line_power_flow_limits_from_raw(
+        raw_system_dir::String,
+        output_dir::String,
+        M,
+        TimestepsPerRepPeriod::Int,
+        profile_names::Vector{String})
+    raw_path = joinpath(raw_system_dir, LINE_POWER_PROFILE_FILENAME)
+    isfile(raw_path) ||
+        error("LinePowerFlowLimits=1 requires $LINE_POWER_PROFILE_FILENAME in $raw_system_dir.")
+
+    ensure_unique_csv_columns(raw_path)
+    raw_profile = load_dataframe(raw_path)
+    raw_demand = get_demand_dataframe(raw_system_dir)
+    demand_length = length(collect(skipmissing(raw_demand[!, :Time_Index])))
+    validate_line_power_profile_dataframe(raw_profile, profile_names, demand_length)
+
+    row_idx = representative_time_indices(M, TimestepsPerRepPeriod)
+    maximum(row_idx) <= nrow(raw_profile) ||
+        error("TDR selected time index exceeds rows in raw $LINE_POWER_PROFILE_FILENAME.")
+
+    output = raw_profile[row_idx, :]
+    output[!, :Time_Index] = 1:nrow(output)
+    CSV.write(joinpath(output_dir, LINE_POWER_PROFILE_FILENAME), output)
+    return output
+end
+
 function write_tdr_minimum_commitment_from_raw_multistage_concat(
         inpath::String,
         mysetup::Dict{Any, Any},
@@ -1868,6 +1902,15 @@ function cluster_inputs(inpath,
             write_tdr_minimum_commitment_from_raw(
                 dirname(raw_gvar_path), dirname(out_gvar_path), M,
                 TimestepsPerRepPeriod; filename = filename)
+        end
+        if mysetup["LinePowerFlowLimits"] == 1
+            write_tdr_line_power_flow_limits_from_raw(
+                dirname(raw_gvar_path),
+                dirname(out_gvar_path),
+                M,
+                TimestepsPerRepPeriod,
+                myinputs["LINE_POWER_LIMIT_PROFILE_NAMES"],
+            )
         end
 
         NewGVColNames = names(GVOutputData)

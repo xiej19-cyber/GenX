@@ -81,6 +81,7 @@ pages = OrderedDict(
             "Resource types" => "Model_Reference/Resources/resource.md"
         ],
         "Policies" => "Model_Reference/policies.md",
+        "Line Power Flow Limits" => "Model_Reference/line_power_flow_limits.md",
         "Solver Configurations" => "Model_Reference/solver_configuration_api.md",
         "Inputs Functions" => "Model_Reference/load_inputs.md",
         "Generate the Model" => "Model_Reference/generate_model.md",

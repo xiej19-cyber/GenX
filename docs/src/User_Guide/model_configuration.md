@@ -96,6 +96,9 @@ The following tables summarize the model settings parameters and their default/p
 |NetworkExpansion | Flag for activating or deactivating inter-regional transmission expansion.|
 ||1 = active|
 ||0 = modeling single zone or for multi-zone problems in which inter regional transmission expansion is not allowed.|
+|LinePowerFlowLimits | Flag for reusable time-dependent lower and upper bounds on selected transmission-line flows.|
+||1 = read profile IDs from `Network.csv` and per-unit curves from `Line_power_flow_limits.csv`.|
+||0 = disabled (default); the extra Network column and profile file are not required.|
 | DC\_OPF | Flag for using the DC-OPF formulation for calculating transmission line MW flows and imposing constraints.|
 ||1 = use DC-OPF formulation|
 ||0 = do not use DC-OPF formulation|

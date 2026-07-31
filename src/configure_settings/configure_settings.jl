@@ -43,6 +43,7 @@ function default_settings()
         "PoliciesFolder" => "policies",
         "ObjScale" => 1,
         "PowerFlowDirectionRequirement" => 0,
+        "LinePowerFlowLimits" => 0,
         "MinGenFraction" => 0,
         "LineMinCF" => 0,
         "LineHurdleRate" => 0,
@@ -89,6 +90,11 @@ function validate_settings!(settings::Dict{Any, Any})
     settings["WriteOutputs"] = lowercase(settings["WriteOutputs"])
     @assert settings["WriteOutputs"] ∈ ["annual", "full"]
     @assert settings["OperationalReserves"] ∈ [0, 1, 2] "OperationalReserves must be 0, 1, or 2"
+    settings["LinePowerFlowLimits"] ∈ [0, 1] ||
+        error("LinePowerFlowLimits must be 0 or 1.")
+    if settings["LinePowerFlowLimits"] == 1 && settings["MultiStage"] == 1
+        error("LinePowerFlowLimits is not supported with MultiStage=1.")
+    end
 
     if "OperationWrapping" in keys(settings)
         @warn """The behavior of the TimeDomainReduction and OperationWrapping
