@@ -45,6 +45,23 @@ This column contains the price thresholds for each Minimum Capacity Requirement 
 Slack variables for Maximum Capacity Requirement constraints are created when GenX detects the presence of a column titled 'PriceCap' in the file `Maximum_capacity_requirement.csv`. 
 This column contains the price thresholds for each Maximum Capacity Requirement constraint, in units of USD/MW. 
 
+## Line Power Flow Limits
+
+When `LinePowerFlowLimits = 1`, optional hourly lower and upper violations are
+activated by adding `policies/Line_power_flow_limits_slack.csv`:
+
+```csv
+Network_Lines,LowerBound_PriceCap,UpperBound_PriceCap
+34,100000,100000
+57,120000,120000
+```
+
+The file must cover exactly every constrained `Network_Lines` identifier.
+Prices are line-specific, finite, positive, and expressed in USD/MWh. This
+allows lines that reuse one time-series profile to have different violation
+costs. The weighted penalty is included in `cUnmetPolicyPenalty` in
+`costs.csv`.
+
 ## Slack Variables Results Files
 
 By default, a policy type's result files include the shadow prices for each policy constraint. 

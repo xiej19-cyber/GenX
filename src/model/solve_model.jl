@@ -64,10 +64,15 @@ function solve_model(EP::Model, setup::Dict)
 
         ## Record solver time
         solver_time = time() - solver_start_time
-    elseif setup["ComputeConflicts"] == 0
+    else
+        solver_time = time() - solver_start_time
+        @info "Solver returned no primal solution" termination_status = termination_status(EP) raw_status = raw_status(EP) result_count = result_count(EP) primal_status = primal_status(EP) dual_status = dual_status(EP)
+    end
+
+    if !has_values(EP) && setup["ComputeConflicts"] == 0
         @info "No model solution. You can try to set ComputeConflicts to 1 in the genx_settings.yml file to compute conflicting constraints."
 
-    elseif setup["ComputeConflicts"] == 1
+    elseif !has_values(EP) && setup["ComputeConflicts"] == 1
         @info "No model solution. Trying to identify conflicting constriants..."
 
         try

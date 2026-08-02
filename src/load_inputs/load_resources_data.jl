@@ -64,6 +64,8 @@ function _get_policyfile_info()
     return policyfile_info
 end
 
+const OPERATIONAL_RESERVE_ASSIGNMENT_FILE = "Resource_operational_reserve.csv"
+
 """
     _get_summary_map()
 
@@ -751,7 +753,7 @@ function validate_policy_dataframe!(filename::AbstractString, policy_in::DataFra
     cols = lowercase.(names(policy_in))
     filter!(col -> col ≠ "resource", cols)
 
-    accepted_cols = ["derating_factor", "esr", "esr_vrestor",
+    accepted_cols = ["derating_factor", "esr", "esr_vrestor", "reserve_region",
         "h2_demand", "qualified_supply",
         "min_cf","min_gf_num","min_gf_den","min_ur",
         [string(cap, type) for cap in ["min_cap", "max_cap"]
@@ -862,6 +864,14 @@ function add_policies_to_resources!(resources::Vector{<:AbstractResource},
                 @info filename * " Successfully Read."
             end
         end
+    end
+    reserve_assignment_path =
+        joinpath(resource_policy_path, OPERATIONAL_RESERVE_ASSIGNMENT_FILE)
+    if isfile(reserve_assignment_path)
+        add_policy_to_resources!(resources,
+            reserve_assignment_path,
+            OPERATIONAL_RESERVE_ASSIGNMENT_FILE)
+        @info OPERATIONAL_RESERVE_ASSIGNMENT_FILE * " Successfully Read."
     end
     return nothing
 end

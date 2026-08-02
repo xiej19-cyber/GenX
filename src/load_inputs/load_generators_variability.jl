@@ -40,5 +40,39 @@ function load_generators_variability!(setup::Dict, path::AbstractString, inputs:
         end
     end
 
+    # Hourly minimum power fractions for thermal resources with unit commitment.
+    # MinVar is a shared profile tag under NarrowVariability; when it is absent
+    # or set to None, retain the resource's static Min_Power value.
+    inputs["pP_Min"] = zeros(inputs["G"], inputs["T"])
+    active_minvar = [y for y in inputs["THERM_COMMIT"]
+                     if !isempty(string(minvar(inputs["RESOURCES"][y]))) &&
+                        lowercase(string(minvar(inputs["RESOURCES"][y]))) != "none"]
+    @assert(setup["NarrowVariability"] == 1 || isempty(active_minvar),
+        "Thermal MinVar profiles require NarrowVariability = 1.")
+    for y in inputs["THERM_COMMIT"]
+        inputs["pP_Min"][y, :] .= min_power(inputs["RESOURCES"][y])
+    end
+    for y in inputs["THERM_COMMIT"]
+        tag = string(minvar(inputs["RESOURCES"][y]))
+        if !isempty(tag) && lowercase(tag) != "none"
+            column = Symbol(tag)
+            @assert(column in propertynames(gen_var),
+                "MinVar tag '$tag' for resource $(inputs["RESOURCE_NAMES"][y]) " *
+                "is not a column in $filename.")
+            values = Float64.(gen_var[1:inputs["T"], column])
+            @assert(all(isfinite, values),
+                "$filename contains non-finite MinVar values in column $tag.")
+            @assert(all(x -> 0 <= x <= 1, values),
+                "MinVar values in $filename column $tag must be between 0 and 1.")
+            inputs["pP_Min"][y, :] .= values
+        end
+    end
+    for y in inputs["THERM_COMMIT"], t in 1:inputs["T"]
+        @assert(inputs["pP_Min"][y, t] <= inputs["pP_Max"][y, t],
+            "Minimum power exceeds maximum availability for resource " *
+            "$(inputs["RESOURCE_NAMES"][y]) at time step $t: " *
+            "$(inputs["pP_Min"][y, t]) > $(inputs["pP_Max"][y, t]).")
+    end
+
     println(filename * " Successfully Read!")
 end

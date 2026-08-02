@@ -1,0 +1,11 @@
+Resource,Reserve_Region_1,Reserve_Region_2
+MA_battery,1,0
+CT_battery,1,0
+ME_battery,0,1
+MA_natural_gas_combined_cycle,0,1
+CT_natural_gas_combined_cycle,1,0
+ME_natural_gas_combined_cycle,0,1
+MA_solar_pv,1,0
+CT_onshore_wind,1,0
+CT_solar_pv,1,0
+ME_onshore_wind,0,1

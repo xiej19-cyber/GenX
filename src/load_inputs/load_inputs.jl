@@ -21,6 +21,9 @@ function load_inputs(setup::Dict, path::AbstractString)
     inputs = Dict()
     # Read input data about power network topology, operating and expansion attributes
     if isfile(joinpath(system_path, "Network.csv"))
+        if setup["LinePowerFlowLimits"] == 1
+            ensure_unique_csv_columns(joinpath(system_path, "Network.csv"))
+        end
         network_var = load_network_data!(setup, system_path, inputs)
     else
         inputs["Z"] = 1
@@ -29,12 +32,19 @@ function load_inputs(setup::Dict, path::AbstractString)
 
     # Read temporal-resolved load data, and clustering information if relevant
     load_demand_data!(setup, path, inputs)
+    if setup["LinePowerFlowLimits"] == 1
+        inputs["L"] > 0 ||
+            error("LinePowerFlowLimits=1 requires a transmission network.")
+        load_line_power_flow_limits!(setup, path, inputs, network_var)
+    end
     # Read fuel cost data, including time-varying fuel costs
     load_fuels_data!(setup, path, inputs)
     # Read in generator/resource related inputs
     load_resources_data!(inputs, setup, path, resources_path)
     # Read in generator/resource availability profiles
     load_generators_variability!(setup, path, inputs)
+    # Read optional hourly lower bounds on the number of committed units
+    load_minimum_commitment!(setup, path, inputs)
 
     validatetimebasis(inputs)
 

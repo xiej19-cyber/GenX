@@ -8,6 +8,18 @@ include("utilities.jl")
     include("expression_manipulation_test.jl")
 end
 
+@testset "Minimum commitment" begin
+    include("test_minimum_commitment.jl")
+end
+
+@testset "Minimum power variability" begin
+    include("test_minimum_power_variability.jl")
+end
+
+@testset "Line power flow limits" begin
+    include("test_line_power_flow_limits.jl")
+end
+
 if VERSION ≥ v"1.7"
     @testset "Resource loading" begin
         include("test_load_resource_data.jl")

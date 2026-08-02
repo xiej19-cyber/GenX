@@ -675,6 +675,118 @@ function write_tdr_generators_variability_from_raw(
 end
 
 """
+    write_tdr_minimum_commitment_from_raw(raw_system_dir, output_dir, M,
+        TimestepsPerRepPeriod)
+
+If the optional full-resolution minimum-commitment profile exists, extract the
+selected representative periods and write an aligned copy to the TDR output
+directory. Users therefore maintain only the raw system input.
+"""
+function write_tdr_minimum_commitment_from_raw(
+        raw_system_dir::String,
+        output_dir::String,
+        M,
+        TimestepsPerRepPeriod::Int;
+        filename::String = "Minimum_commitment_coal.csv")
+    raw_path = joinpath(raw_system_dir, filename)
+    isfile(raw_path) || return nothing
+
+    raw_profile = load_dataframe(raw_path)
+    if "Time_Index" in names(raw_profile)
+        select!(raw_profile, Not(:Time_Index))
+    end
+    row_idx = representative_time_indices(M, TimestepsPerRepPeriod)
+    maximum(row_idx) <= nrow(raw_profile) || error(
+        "TDR selected time index exceeds rows in raw $filename: maximum " *
+        "selected index = $(maximum(row_idx)), raw rows = $(nrow(raw_profile)).")
+
+    output = raw_profile[row_idx, :]
+    insertcols!(output, 1, :Time_Index => 1:nrow(output))
+    CSV.write(joinpath(output_dir, filename), output)
+    return output
+end
+
+"""
+    write_tdr_line_power_flow_limits_from_raw(raw_system_dir, output_dir, M,
+        TimestepsPerRepPeriod, profile_names)
+
+Extract the same representative-period rows selected for demand and generator
+profiles from the full-resolution line power profile file. The line profiles
+are not clustering features.
+"""
+function write_tdr_line_power_flow_limits_from_raw(
+        raw_system_dir::String,
+        output_dir::String,
+        M,
+        TimestepsPerRepPeriod::Int,
+        profile_names::Vector{String})
+    raw_path = joinpath(raw_system_dir, LINE_POWER_PROFILE_FILENAME)
+    isfile(raw_path) ||
+        error("LinePowerFlowLimits=1 requires $LINE_POWER_PROFILE_FILENAME in $raw_system_dir.")
+
+    ensure_unique_csv_columns(raw_path)
+    raw_profile = load_dataframe(raw_path)
+    raw_demand = get_demand_dataframe(raw_system_dir)
+    demand_length = length(collect(skipmissing(raw_demand[!, :Time_Index])))
+    validate_line_power_profile_dataframe(raw_profile, profile_names, demand_length)
+
+    row_idx = representative_time_indices(M, TimestepsPerRepPeriod)
+    maximum(row_idx) <= nrow(raw_profile) ||
+        error("TDR selected time index exceeds rows in raw $LINE_POWER_PROFILE_FILENAME.")
+
+    output = raw_profile[row_idx, :]
+    output[!, :Time_Index] = 1:nrow(output)
+    CSV.write(joinpath(output_dir, LINE_POWER_PROFILE_FILENAME), output)
+    return output
+end
+
+function write_tdr_minimum_commitment_from_raw_multistage_concat(
+        inpath::String,
+        mysetup::Dict{Any, Any},
+        NumStages::Int,
+        output_dir::String,
+        M,
+        TimestepsPerRepPeriod::Int;
+        filename::String = "Minimum_commitment_coal.csv")
+    raw_profiles = DataFrame[]
+    expected_columns = nothing
+    found_file = false
+
+    for per in 1:NumStages
+        raw_path = joinpath(inpath, "inputs", "inputs_p$per",
+            mysetup["SystemFolder"], filename)
+        if !isfile(raw_path)
+            found_file && error("$filename must be present in every stage when " *
+                                "MultiStageConcatenate is enabled.")
+            continue
+        end
+        found_file = true
+        profile = load_dataframe(raw_path)
+        if "Time_Index" in names(profile)
+            select!(profile, Not(:Time_Index))
+        end
+        if expected_columns === nothing
+            expected_columns = names(profile)
+        elseif names(profile) != expected_columns
+            error("Columns of $filename must be consistent across all stages.")
+        end
+        push!(raw_profiles, profile)
+    end
+    found_file || return nothing
+    length(raw_profiles) == NumStages || error(
+        "$filename must be present in every stage when MultiStageConcatenate is enabled.")
+
+    raw_profile = vcat(raw_profiles...)
+    row_idx = representative_time_indices(M, TimestepsPerRepPeriod)
+    maximum(row_idx) <= nrow(raw_profile) || error(
+        "TDR selected time index exceeds rows in concatenated raw $filename.")
+    output = raw_profile[row_idx, :]
+    insertcols!(output, 1, :Time_Index => 1:nrow(output))
+    CSV.write(joinpath(output_dir, filename), output)
+    return output
+end
+
+"""
     write_tdr_generators_variability_from_raw_multistage_concat(
         inpath, mysetup, NumStages, out_gvar_path, M, TimestepsPerRepPeriod
     )
@@ -1480,6 +1592,11 @@ function cluster_inputs(inpath,
                     TimestepsPerRepPeriod;
                     v = v
                 )
+                for filename in ("Minimum_commitment_coal.csv", "Minimum_commitment_gas.csv")
+                    write_tdr_minimum_commitment_from_raw_multistage_concat(
+                        inpath, mysetup, NumStages, dirname(out_gvar_path), M,
+                        TimestepsPerRepPeriod; filename = filename)
+                end
 
                 # Keep this for the VRE-STOR block below.
                 # The following VRE-STOR logic uses NewGVColNames to identify solar/wind columns.
@@ -1628,6 +1745,11 @@ function cluster_inputs(inpath,
                 TimestepsPerRepPeriod;
                 v = v
             )
+            for filename in ("Minimum_commitment_coal.csv", "Minimum_commitment_gas.csv")
+                write_tdr_minimum_commitment_from_raw(
+                    dirname(raw_gvar_path), dirname(out_gvar_path), M,
+                    TimestepsPerRepPeriod; filename = filename)
+            end
 
             NewGVColNames = names(GVOutputData)
 
@@ -1776,6 +1898,20 @@ function cluster_inputs(inpath,
             TimestepsPerRepPeriod;
             v = v
         )
+        for filename in ("Minimum_commitment_coal.csv", "Minimum_commitment_gas.csv")
+            write_tdr_minimum_commitment_from_raw(
+                dirname(raw_gvar_path), dirname(out_gvar_path), M,
+                TimestepsPerRepPeriod; filename = filename)
+        end
+        if mysetup["LinePowerFlowLimits"] == 1
+            write_tdr_line_power_flow_limits_from_raw(
+                dirname(raw_gvar_path),
+                dirname(out_gvar_path),
+                M,
+                TimestepsPerRepPeriod,
+                myinputs["LINE_POWER_LIMIT_PROFILE_NAMES"],
+            )
+        end
 
         NewGVColNames = names(GVOutputData)
 

@@ -12,6 +12,12 @@ Set `TimeDomainReduction: 1 `in the GenX settings for the case.
 
 When the case is run (but before the optimization model is built), reduced time series data will be output to a folder within the case, (typically) `TDR_results`. Note that if the data already exists in that folder, it will not be overwritten. If a user wants to change the time domain reduction settings and try again, the folder should be deleted before the case is run.
 
+If `LinePowerFlowLimits = 1`, the line-limit profiles are not clustering
+features. GenX validates the raw profile time basis, extracts the same original
+rows selected for demand and availability, and writes
+`TDR_results/Line_power_flow_limits.csv` with a new consecutive
+`Time_Index`.
+
 The clustering is done according to the settings in `time_domain_reduction.yml`. These are described in the Inputs section of data_documentation.
 
 Time domain clustering can only be performed on data which represents a single contiguous period: typically a year of 8760 or 8736 hours.

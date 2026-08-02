@@ -744,6 +744,7 @@ end
 
 #variability
 maxvar(r::AbstractResource) = get(r, :maxvar, "None") # if var cannot be found, then set as None
+minvar(r::AbstractResource) = get(r, :minvar, "None") # hourly minimum-power profile tag
 
 # Reservoir hydro and storage
 const default_percent = 1.0

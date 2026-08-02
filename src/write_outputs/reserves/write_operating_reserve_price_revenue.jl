@@ -37,10 +37,40 @@ function write_operating_reserve_regulation_revenue(path::AbstractString,
     weighted_rsv_price = operating_reserve_price(EP, inputs, setup)
 
     if setup["OperationalReserves"] == 2
-        rsvrevenue = value.(EP[:vRSV][RSV, :].data) .*
-                     weighted_rsv_price[zones[RSV], :]
-        regrevenue = value.(EP[:vREG][REG, :].data) .*
-                     weighted_reg_price[zones[REG], :]
+        if inputs["OPERATIONAL_RESERVE_CUSTOM_REGIONS"]
+            resource_region = inputs["OPERATIONAL_RESERVE_RESOURCE_REGION"]
+            region_zones = inputs["OPERATIONAL_RESERVE_REGION_ZONES"]
+            rsv_resource_price = copy(weighted_rsv_price[resource_region[RSV], :])
+            reg_resource_price = copy(weighted_reg_price[resource_region[REG], :])
+            if !isempty(inputs["OPERATIONAL_RESERVE_TRANSFER_LINES"])
+                keys = inputs["OPERATIONAL_RESERVE_SUPPLY_KEYS"]
+                rsv_supply_price = -Array(dual.(EP[:cRsvTransferSupply])) ./
+                                   transpose(inputs["omega"]) .* scale_factor
+                reg_supply_price = -Array(dual.(EP[:cRegTransferSupply])) ./
+                                   transpose(inputs["omega"]) .* scale_factor
+                for (row, y) in enumerate(RSV)
+                    r = resource_region[y]
+                    if zone_id(gen[y]) ∉ region_zones[r]
+                        key_row = findfirst(==((zone_id(gen[y]), r)), keys)
+                        rsv_resource_price[row, :] .= rsv_supply_price[key_row, :]
+                    end
+                end
+                for (row, y) in enumerate(REG)
+                    r = resource_region[y]
+                    if zone_id(gen[y]) ∉ region_zones[r]
+                        key_row = findfirst(==((zone_id(gen[y]), r)), keys)
+                        reg_resource_price[row, :] .= reg_supply_price[key_row, :]
+                    end
+                end
+            end
+            rsvrevenue = value.(EP[:vRSV][RSV, :].data) .* rsv_resource_price
+            regrevenue = value.(EP[:vREG][REG, :].data) .* reg_resource_price
+        else
+            rsvrevenue = value.(EP[:vRSV][RSV, :].data) .*
+                         weighted_rsv_price[zones[RSV], :]
+            regrevenue = value.(EP[:vREG][REG, :].data) .*
+                         weighted_reg_price[zones[REG], :]
+        end
     else
         rsvrevenue = value.(EP[:vRSV][RSV, :].data) .* transpose(weighted_rsv_price)
         regrevenue = value.(EP[:vREG][REG, :].data) .* transpose(weighted_reg_price)
@@ -75,8 +105,11 @@ function operating_regulation_price(EP::Model, inputs::Dict, setup::Dict)
     requirement_constraint = haskey(EP, :cRegVreStor) ? EP[:cRegVreStor] : EP[:cReg]
     prices = Array(dual.(requirement_constraint))
     if setup["OperationalReserves"] == 2
+        if inputs["OPERATIONAL_RESERVE_CUSTOM_REGIONS"]
+            return prices ./ transpose(ω) .* scale_factor
+        end
         zonal_prices = zeros(inputs["Z"], length(ω))
-        zonal_prices[inputs["OPERATIONAL_RESERVE_ZONES"], :] .=
+        zonal_prices[inputs["OPERATIONAL_RESERVE_REGIONS"], :] .=
             prices ./ transpose(ω) .* scale_factor
         if !isempty(inputs["OPERATIONAL_RESERVE_TRANSFER_LINES"])
             supply_zones = unique(inputs["pTrans_Start_Zone"][
@@ -108,8 +141,11 @@ function operating_reserve_price(EP::Model, inputs::Dict, setup::Dict)
                              EP[:cRsvReq]
     prices = Array(dual.(requirement_constraint))
     if setup["OperationalReserves"] == 2
+        if inputs["OPERATIONAL_RESERVE_CUSTOM_REGIONS"]
+            return prices ./ transpose(ω) .* scale_factor
+        end
         zonal_prices = zeros(inputs["Z"], length(ω))
-        zonal_prices[inputs["OPERATIONAL_RESERVE_ZONES"], :] .=
+        zonal_prices[inputs["OPERATIONAL_RESERVE_REGIONS"], :] .=
             prices ./ transpose(ω) .* scale_factor
         if !isempty(inputs["OPERATIONAL_RESERVE_TRANSFER_LINES"])
             supply_zones = unique(inputs["pTrans_Start_Zone"][

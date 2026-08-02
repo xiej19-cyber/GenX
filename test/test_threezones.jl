@@ -62,4 +62,37 @@ for y in zonal_inputs["REG"], z in reserve_zones
     @test normalized_coefficient(EP_zonal[:cReg][z, 1], EP_zonal[:vREG][y, 1]) == expected
 end
 
+# Custom reserve regions may aggregate physical zones and assign resources independently
+# of their model zone.
+mktempdir() do temp_dir
+    custom_case = joinpath(temp_dir, "three_zones")
+    cp(joinpath(@__DIR__, "three_zones"), custom_case)
+    fixture = joinpath(@__DIR__, "custom_operational_reserve")
+    cp(joinpath(fixture, "Operational_reserves.csv"),
+        joinpath(custom_case, "system", "Operational_reserves.csv"); force = true)
+    cp(joinpath(fixture, "Resource_operational_reserve.csv"),
+        joinpath(custom_case, "resources", "policy_assignments",
+            "Resource_operational_reserve.csv"); force = true)
+    custom_inputs = redirect_stdout(devnull) do
+        load_inputs(zonal_setup, custom_case)
+    end
+    custom_EP = redirect_stdout(devnull) do
+        generate_model(zonal_setup, custom_inputs, optimizer)
+    end
+    @test custom_inputs["OPERATIONAL_RESERVE_REGIONS"] == [1, 2]
+    @test custom_inputs["OPERATIONAL_RESERVE_REGION_ZONES"] == Dict(1 => [1, 2], 2 => [3])
+    @test custom_inputs["pReg_Req_Demand_By_Zone"] == [0.01, 0.02, 0.03]
+    @test custom_inputs["pRsv_Req_Demand_By_Zone"] == [0.033, 0.043, 0.053]
+    @test custom_inputs["OPERATIONAL_RESERVE_TRANSFER_LINES"] == [2]
+    ma_gas = findfirst(==("MA_natural_gas_combined_cycle"),
+        custom_inputs["RESOURCE_NAMES"])
+    @test custom_inputs["OPERATIONAL_RESERVE_RESOURCE_REGION"][ma_gas] == 2
+    @test normalized_coefficient(custom_EP[:cRsvReq][2, 1],
+        custom_EP[:vRSV][ma_gas, 1]) == 0
+    @test normalized_coefficient(custom_EP[:cRsvReq][2, 1],
+        custom_EP[:vRSV_TRANSFER][2, 1]) == 1 - custom_inputs["pPercent_Loss"][2]
+    @test normalized_coefficient(custom_EP[:cRsvTransferSupply][(1, 2), 1],
+        custom_EP[:vRSV][ma_gas, 1]) == -1
+end
+
 end # module TestThreeZones

@@ -34,6 +34,19 @@ jobs:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
       - uses: julia-actions/cache@v2
+
+      # NearestNeighbors 0.4.24 uses Base.Returns, which is unavailable on Julia 1.6.
+      # Keep this workaround local to the Julia 1.6 CI job so newer Julia versions
+      # can continue resolving newer compatible releases.
+      - name: Pin NearestNeighbors for Julia 1.6
+        if: matrix.version == '1.6'
+        run: |
+          julia --project=. -e '
+            using Pkg
+            Pkg.add(PackageSpec(name="NearestNeighbors", version=v"0.4.22"))
+            Pkg.pin(PackageSpec(name="NearestNeighbors", version=v"0.4.22"))
+          '
+
       - uses: julia-actions/julia-buildpkg@latest
       - uses: julia-actions/julia-runtest@latest
       - uses: julia-actions/julia-processcoverage@v1

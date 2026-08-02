@@ -17,8 +17,9 @@ function write_rsv(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
         unmet_values = Array(value.(EP[:vUNMET_RSV])) * scale_factor
         if setup["OperationalReserves"] == 2
             unmet_matrix = unmet_values
-            unmet_zones = inputs["OPERATIONAL_RESERVE_ZONES"]
-            unmet_names = ["unmet_z$z" for z in unmet_zones]
+            unmet_zones = inputs["OPERATIONAL_RESERVE_REGIONS"]
+            label = inputs["OPERATIONAL_RESERVE_CUSTOM_REGIONS"] ? "region" : "z"
+            unmet_names = ["unmet_$(label)$z" for z in unmet_zones]
         else
             unmet_matrix = reshape(unmet_values, 1, :)
             unmet_zones = [0]

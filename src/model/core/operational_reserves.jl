@@ -32,7 +32,7 @@ function operational_reserves_zonal_contingency!(EP::Model, inputs::Dict, setup:
 
     gen = inputs["RESOURCES"]
     T = inputs["T"]
-    reserve_zones = inputs["OPERATIONAL_RESERVE_ZONES"]
+    reserve_zones = inputs["OPERATIONAL_RESERVE_REGIONS"]
     UCommit = setup["UCommit"]
     COMMIT = inputs["COMMIT"]
     transfer_lines = inputs["OPERATIONAL_RESERVE_TRANSFER_LINES"]
@@ -41,11 +41,16 @@ function operational_reserves_zonal_contingency!(EP::Model, inputs::Dict, setup:
                           if inputs["pTrans_End_Zone"][l] == z]
         unique([z; upstream_zones])
     end
-    commit_by_zone = Dict(z => intersect(COMMIT,
-            reduce(union,
-                (resources_in_zone_by_rid(gen, rz) for rz in contingency_resource_zones(z));
-                init = Int[]))
-        for z in reserve_zones)
+    resource_region = inputs["OPERATIONAL_RESERVE_RESOURCE_REGION"]
+    commit_by_zone = if inputs["OPERATIONAL_RESERVE_CUSTOM_REGIONS"]
+        Dict(r => [y for y in COMMIT if resource_region[y] == r] for r in reserve_zones)
+    else
+        Dict(z => intersect(COMMIT,
+                reduce(union,
+                    (resources_in_zone_by_rid(gen, rz) for rz in contingency_resource_zones(z));
+                    init = Int[]))
+            for z in reserve_zones)
+    end
     dynamic = UCommit >= 1 ? inputs["pDynamic_Contingency"] : 0
 
     if UCommit == 1 && dynamic == 1
@@ -273,7 +278,9 @@ function operational_reserves_core!(EP::Model, inputs::Dict, setup::Dict)
     T = inputs["T"]     # Number of time steps (hours)
     Z = inputs["Z"]
     zonal_reserves = setup["OperationalReserves"] == 2
-    reserve_zones = inputs["OPERATIONAL_RESERVE_ZONES"]
+    reserve_zones = inputs["OPERATIONAL_RESERVE_REGIONS"]
+    region_zones = inputs["OPERATIONAL_RESERVE_REGION_ZONES"]
+    custom_regions = zonal_reserves && inputs["OPERATIONAL_RESERVE_CUSTOM_REGIONS"]
 
     REG = inputs["REG"]
     RSV = inputs["RSV"]
@@ -287,12 +294,22 @@ function operational_reserves_core!(EP::Model, inputs::Dict, setup::Dict)
     function must_run_vre_generation(t; zone = nothing)
         eligible = intersect(inputs["VRE"], inputs["MUST_RUN"])
         if !isnothing(zone)
-            eligible = intersect(eligible, resources_in_zone_by_rid(gen, zone))
+            eligible = [y for y in eligible if zone_id(gen[y]) == zone]
         end
         sum(
             pP_Max(y, t) * EP[:eTotalCap][y]
             for y in eligible;
             init = 0)
+    end
+    function regional_requirement(r, t, demand_parameter, vre_parameter)
+        if custom_regions
+            return sum(demand_parameter[z] * pDemand[t, z] +
+                       vre_parameter[z] * must_run_vre_generation(t; zone = z)
+                for z in region_zones[r])
+        end
+        return demand_parameter[r] * sum(pDemand[t, z] for z in region_zones[r]) +
+               vre_parameter[r] * sum(must_run_vre_generation(t; zone = z)
+            for z in region_zones[r])
     end
 
     ### Variables ###
@@ -324,8 +341,9 @@ function operational_reserves_core!(EP::Model, inputs::Dict, setup::Dict)
     # Reg up and down requirements are symmetric
     if zonal_reserves
         @expression(EP, eRegReq[z in reserve_zones, t = 1:T],
-            inputs["pReg_Req_Demand"][z] * pDemand[t, z] +
-            inputs["pReg_Req_VRE"][z] * must_run_vre_generation(t; zone = z))
+            regional_requirement(z, t,
+                custom_regions ? inputs["pReg_Req_Demand_By_Zone"] : inputs["pReg_Req_Demand"],
+                custom_regions ? inputs["pReg_Req_VRE_By_Zone"] : inputs["pReg_Req_VRE"]))
     else
         @expression(EP, eRegReq[t = 1:T],
             inputs["pReg_Req_Demand"] * systemwide_hourly_demand[t] +
@@ -335,8 +353,9 @@ function operational_reserves_core!(EP::Model, inputs::Dict, setup::Dict)
     # and the largest single contingency (generator or transmission line outage)
     if zonal_reserves
         @expression(EP, eRsvReq[z in reserve_zones, t = 1:T],
-            inputs["pRsv_Req_Demand"][z] * pDemand[t, z] +
-            inputs["pRsv_Req_VRE"][z] * must_run_vre_generation(t; zone = z) +
+            regional_requirement(z, t,
+                custom_regions ? inputs["pRsv_Req_Demand_By_Zone"] : inputs["pRsv_Req_Demand"],
+                custom_regions ? inputs["pRsv_Req_VRE_By_Zone"] : inputs["pRsv_Req_VRE"]) +
             (haskey(EP, :eContingencyReq) ? EP[:eContingencyReq][z, t] : 0))
     else
         @expression(EP, eRsvReq[t = 1:T],
@@ -386,20 +405,23 @@ function operational_reserves_constraints!(EP, inputs, setup)
     eReserveRequirement = EP[:eRsvReq]
 
     if setup["OperationalReserves"] == 2
-        reserve_zones = inputs["OPERATIONAL_RESERVE_ZONES"]
+        reserve_zones = inputs["OPERATIONAL_RESERVE_REGIONS"]
         transfer_lines = inputs["OPERATIONAL_RESERVE_TRANSFER_LINES"]
         gen = inputs["RESOURCES"]
-        reg_by_zone = Dict(z => intersect(REG, resources_in_zone_by_rid(gen, z))
+        resource_region = inputs["OPERATIONAL_RESERVE_RESOURCE_REGION"]
+        region_zones = inputs["OPERATIONAL_RESERVE_REGION_ZONES"]
+        custom_regions = inputs["OPERATIONAL_RESERVE_CUSTOM_REGIONS"]
+        is_local(y, r) = !custom_regions || zone_id(gen[y]) in region_zones[r]
+        reg_by_zone = Dict(z => [y for y in REG
+                                if resource_region[y] == z && is_local(y, z)]
             for z in reserve_zones)
-        rsv_by_zone = Dict(z => intersect(RSV, resources_in_zone_by_rid(gen, z))
+        rsv_by_zone = Dict(z => [y for y in RSV
+                                if resource_region[y] == z && is_local(y, z)]
             for z in reserve_zones)
+        transfer_region = inputs["OPERATIONAL_RESERVE_TRANSFER_REGION"]
         incoming_lines = Dict(z => [l for l in transfer_lines
-                                    if inputs["pTrans_End_Zone"][l] == z]
+                                    if transfer_region[l] == z]
             for z in reserve_zones)
-        supply_zones = unique(inputs["pTrans_Start_Zone"][transfer_lines])
-        outgoing_lines = Dict(z => [l for l in transfer_lines
-                                    if inputs["pTrans_Start_Zone"][l] == z]
-            for z in supply_zones)
         transfer_delivery(l) = setup["Trans_Loss_Segments"] == 1 ?
                                1 - inputs["pPercent_Loss"][l] : 1.0
         @constraint(EP, cReg[z in reserve_zones, t = 1:T],
@@ -412,14 +434,36 @@ function operational_reserves_constraints!(EP, inputs, setup)
                 for l in incoming_lines[z]) + vUNMET_RSV[z, t] >=
             eReserveRequirement[z, t])
         if !isempty(transfer_lines)
-            @constraint(EP, cRegTransferSupply[z in supply_zones, t = 1:T],
-                sum(EP[:vREG_TRANSFER][l, t] for l in outgoing_lines[z]) ==
-                sum(vREG[y, t] for y in intersect(REG,
-                    resources_in_zone_by_rid(gen, z))))
-            @constraint(EP, cRsvTransferSupply[z in supply_zones, t = 1:T],
-                sum(EP[:vRSV_TRANSFER][l, t] for l in outgoing_lines[z]) ==
-                sum(vRSV[y, t] for y in intersect(RSV,
-                    resources_in_zone_by_rid(gen, z))))
+            if custom_regions
+                supply_keys = unique([(inputs["pTrans_Start_Zone"][l], transfer_region[l])
+                                      for l in transfer_lines])
+                inputs["OPERATIONAL_RESERVE_SUPPLY_KEYS"] = supply_keys
+                outgoing_lines = Dict(k => [l for l in transfer_lines
+                                            if inputs["pTrans_Start_Zone"][l] == k[1] &&
+                                               transfer_region[l] == k[2]]
+                    for k in supply_keys)
+                @constraint(EP, cRegTransferSupply[k in supply_keys, t = 1:T],
+                    sum(EP[:vREG_TRANSFER][l, t] for l in outgoing_lines[k]) ==
+                    sum(vREG[y, t] for y in REG
+                        if zone_id(gen[y]) == k[1] && resource_region[y] == k[2]))
+                @constraint(EP, cRsvTransferSupply[k in supply_keys, t = 1:T],
+                    sum(EP[:vRSV_TRANSFER][l, t] for l in outgoing_lines[k]) ==
+                    sum(vRSV[y, t] for y in RSV
+                        if zone_id(gen[y]) == k[1] && resource_region[y] == k[2]))
+            else
+                supply_zones = unique(inputs["pTrans_Start_Zone"][transfer_lines])
+                outgoing_lines = Dict(z => [l for l in transfer_lines
+                                            if inputs["pTrans_Start_Zone"][l] == z]
+                    for z in supply_zones)
+                @constraint(EP, cRegTransferSupply[z in supply_zones, t = 1:T],
+                    sum(EP[:vREG_TRANSFER][l, t] for l in outgoing_lines[z]) ==
+                    sum(vREG[y, t] for y in intersect(REG,
+                        resources_in_zone_by_rid(gen, z))))
+                @constraint(EP, cRsvTransferSupply[z in supply_zones, t = 1:T],
+                    sum(EP[:vRSV_TRANSFER][l, t] for l in outgoing_lines[z]) ==
+                    sum(vRSV[y, t] for y in intersect(RSV,
+                        resources_in_zone_by_rid(gen, z))))
+            end
             @constraint(EP, cReserveTransferHeadroom[l in transfer_lines, t = 1:T],
                 EP[:vFLOW][l, t] + EP[:vREG_TRANSFER][l, t] +
                 EP[:vRSV_TRANSFER][l, t] <= EP[:eAvail_Trans_Cap][l])

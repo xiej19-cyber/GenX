@@ -23,6 +23,24 @@ function fusion_capacity_reserve_margin_adjustment!(EP::Model,
     end
 end
 
+"""Subtract fusion parasitic power from the peak-load capacity reserve margin."""
+function fusion_capacity_reserve_margin_peakload_adjustment!(EP::Model,
+        inputs::Dict)
+    gen = inputs["RESOURCES"]
+    applicable_resources = intersect(ids_with(gen, fusion), inputs["THERM_COMMIT"])
+
+    for y in applicable_resources
+        resource_component = resource_name(gen[y])
+        for capres_zone in 1:inputs["NCapacityReserveMargin"]
+            t_peak = inputs["peak_hour_idx"][capres_zone]
+            adjustment = fusion_capacity_reserve_margin_adjustment(
+                EP, inputs, resource_component, y, capres_zone, t_peak)
+            add_to_expression!(EP[:eCapResMarBalancePeak][capres_zone], adjustment)
+        end
+    end
+    return
+end
+
 # inner-loop function: loops over Capacity Reserve Margin zones, for one resource
 # and actually adjusts the eCapResMarBalance expression
 function _fusion_capacity_reserve_margin_adjustment!(EP::Model,
@@ -75,7 +93,8 @@ function fusion_capacity_reserve_margin_adjustment(EP::Model,
     dwell_adj = -capresfactor *
                 _fusion_dwell_avoided_operation.(dwell_time, ePulseStart[timesteps])
 
-    total_adj = @expression(EP, [t in 1:T], capacity_to_underway_adj[t] + parasitic_adj[t] + dwell_adj[t])
+    total_adj = @expression(EP, [i in eachindex(timesteps)],
+        capacity_to_underway_adj[i] + parasitic_adj[i] + dwell_adj[i])
 
     # Cancel out the dependence on down_var, since CRM is related to power, not capacity
     if y in ids_with_maintenance(gen)
@@ -85,6 +104,17 @@ function fusion_capacity_reserve_margin_adjustment(EP::Model,
     end
 
     return total_adj
+end
+
+function fusion_capacity_reserve_margin_adjustment(EP::Model,
+        inputs::Dict,
+        resource_component::AbstractString,
+        y::Int,
+        capres_zone::Int,
+        timestep::Int)
+    adjustment = fusion_capacity_reserve_margin_adjustment(
+        EP, inputs, resource_component, y, capres_zone, [timestep])
+    return adjustment[1]
 end
 
 # alias for better parallelism in effective_capacity.jl

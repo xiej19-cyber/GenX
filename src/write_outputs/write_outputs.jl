@@ -122,6 +122,13 @@ function write_outputs(EP::Model, path::AbstractString, setup::Dict, inputs::Dic
     end
 
     if inputs["Z"] > 1
+        if setup["LinePowerFlowLimits"] == 1
+            elapsed_time_line_limits = @elapsed write_line_power_flow_limits(
+                path, inputs, setup, EP)
+            println("Time elapsed for writing line power flow limits is")
+            println(elapsed_time_line_limits)
+        end
+
         if output_settings_d["WriteTransmissionFlows"]
             elapsed_time_flows = @elapsed write_transmission_flows(path, inputs, setup, EP)
             println("Time elapsed for writing transmission flows is")

@@ -1,0 +1,4 @@
+Reserve_Region,Zones,Reg_Req_Percent_Demand,Reg_Req_Percent_VRE,Rsv_Req_Percent_Demand,Rsv_Req_Percent_VRE,Unmet_Rsv_Penalty_Dollar_per_MW,Dynamic_Contingency,Static_Contingency_MW
+1,1,0.01,0.0032,0.033,0.0795,1000,0,0
+1,2,0.02,0.0042,0.043,0.0895,1000,0,0
+2,3,0.03,0.0052,0.053,0.0995,1000,0,0

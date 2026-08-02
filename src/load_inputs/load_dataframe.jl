@@ -127,6 +127,18 @@ function check_for_duplicate_keys(path::AbstractString)
     end
 end
 
+function ensure_unique_csv_columns(path::AbstractString)
+    rows = CSV.File(path; header = false, limit = 1, types = String)
+    isempty(rows) && error("CSV file $path is empty.")
+    columns = String.(collect(first(rows)))
+    duplicates = unique([
+        column for column in columns if count(==(column), columns) > 1
+    ])
+    isempty(duplicates) ||
+        error("Duplicate column names in $path are not allowed: $duplicates.")
+    return nothing
+end
+
 function load_dataframe_from_file(path)::DataFrame
     check_for_duplicate_keys(path)
     CSV.read(path, DataFrame, header = 1)

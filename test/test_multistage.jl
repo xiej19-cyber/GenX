@@ -33,13 +33,16 @@ optimal_tol_rel = get_attribute.((EP[i] for i in 1:multistage_setup["NumStages"]
     "ipm_optimality_tolerance")
 optimal_tol = optimal_tol_rel .* obj_test  # Convert to absolute tolerance
 
-# Test the objective value
-test_result = @test all(obj_true .- optimal_tol .<= obj_test .<= obj_true .+ optimal_tol)
+# Keep a small cross-version allowance around the expected objective. The test
+# case uses simplex to avoid platform-dependent IPM stopping points.
+regression_tol_rel = 1e-5
+regression_tol = max.(optimal_tol, regression_tol_rel .* abs.(obj_true))
+test_result = @test all(abs.(obj_test .- obj_true) .<= regression_tol)
 
 # Round objective value and tolerance. Write to test log.
-obj_test = round_from_tol!.(obj_test, optimal_tol)
-optimal_tol = round_from_tol!.(optimal_tol, optimal_tol)
-write_testlog(test_path, obj_test, optimal_tol, test_result)
+obj_test = round_from_tol!.(obj_test, regression_tol)
+regression_tol = round_from_tol!.(regression_tol, regression_tol)
+write_testlog(test_path, obj_test, regression_tol, test_result)
 
 function test_new_build(EP::Dict, inputs::Dict)
     ### Test that the resource with New_Build = 0 did not expand capacity

@@ -22,7 +22,7 @@ The following tables summarize the model settings parameters and their default/p
 |OperationalReserves | Flag for modeling operational reserves .|
 ||0 = No operational reserves considered. |
 ||1 = Consider regulation (primary) and spinning (secondary) reserves with one system-wide requirement. |
-||2 = Consider regulation and spinning reserves with separate local requirements for the zones listed in `Operational_reserves.csv`. Requirements can be met by local resources and by remote resources delivered from an unlisted `Start_Zone` over a network line ending in the listed zone. |
+||2 = Consider regulation and spinning reserves with separate requirements for user-defined reserve regions. Regions may be individual zones or collections of zones; eligible resources are assigned in `Resource_operational_reserve.csv`. The legacy one-region-per-zone format remains supported. |
 |StorageLosses | Flag to account for storage related losses.|
 ||0 = VRE and CO2 constraints DO NOT account for energy lost. |
 ||1 = constraints account for energy lost. |
@@ -96,6 +96,9 @@ The following tables summarize the model settings parameters and their default/p
 |NetworkExpansion | Flag for activating or deactivating inter-regional transmission expansion.|
 ||1 = active|
 ||0 = modeling single zone or for multi-zone problems in which inter regional transmission expansion is not allowed.|
+|LinePowerFlowLimits | Flag for reusable time-dependent lower and upper bounds on selected transmission-line flows.|
+||1 = read profile IDs from `Network.csv` and per-unit curves from `Line_power_flow_limits.csv`.|
+||0 = disabled (default); the extra Network column and profile file are not required.|
 | DC\_OPF | Flag for using the DC-OPF formulation for calculating transmission line MW flows and imposing constraints.|
 ||1 = use DC-OPF formulation|
 ||0 = do not use DC-OPF formulation|

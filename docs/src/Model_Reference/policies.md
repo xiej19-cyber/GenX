@@ -31,6 +31,17 @@ Pages = ["maximum_capacity_requirement.jl"]
 GenX.hydrogen_demand!
 ```
 
+## Additional Policy Constraints
+```@docs
+GenX.minimum_generation_fraction!
+GenX.capacity_payment!
+GenX.minimum_capacity_factor_requirement!
+GenX.minimum_utilizationrate!
+GenX.cap_reserve_margin_multihours!
+GenX.minimum_capacity_requirement_simple!
+GenX.maximum_capacity_requirement_simple!
+```
+
 ## Hourly clean supply matching constraint
 ```@autodocs
 Modules = [GenX]

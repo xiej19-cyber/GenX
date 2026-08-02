@@ -4,6 +4,19 @@ Modules = [GenX]
 Pages = ["write_outputs.jl", "choose_output_dir.jl", "dftranspose.jl"]
 ```
 
+## Additional Policy Outputs
+```@docs
+GenX.write_utilrate_revenue
+GenX.write_demand
+GenX.write_virtual_discharge_peakload
+GenX.write_capacity_value_peakload
+GenX.thermal_plant_effective_capacity_peakload
+GenX.write_genfrac_revenue_cost
+GenX.write_mincf_revenue
+GenX.thermal_plant_effective_capacity_multihours
+GenX.write_reserve_margin_revenue_peakload
+```
+
 ## Write Status
 ```@autodocs
 Modules = [GenX]

@@ -186,6 +186,9 @@ function generate_model(setup::Dict, inputs::Dict, OPTIMIZER::MOI.OptimizerWithA
     if Z > 1
         investment_transmission!(EP, inputs, setup)
         transmission!(EP, inputs, setup)
+        if setup["LinePowerFlowLimits"] == 1
+            line_power_flow_limits!(EP, inputs, setup)
+        end
     end
 
     if Z > 1 && setup["DC_OPF"] != 0

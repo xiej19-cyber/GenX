@@ -3098,32 +3098,48 @@ function vre_stor_operational_reserves!(EP::Model, inputs::Dict, setup::Dict)
     # Total system reserve constraints
     zonal_reserves = setup["OperationalReserves"] == 2
     if zonal_reserves
-        reserve_zones = inputs["OPERATIONAL_RESERVE_ZONES"]
-        reg_by_zone = Dict(z => intersect(inputs["REG"], resources_in_zone_by_rid(gen, z)) for z in reserve_zones)
-        rsv_by_zone = Dict(z => intersect(inputs["RSV"], resources_in_zone_by_rid(gen, z)) for z in reserve_zones)
-        solar_reg_by_zone = Dict(z => intersect(SOLAR_REG, resources_in_zone_by_rid(gen, z)) for z in reserve_zones)
-        wind_reg_by_zone = Dict(z => intersect(WIND_REG, resources_in_zone_by_rid(gen, z)) for z in reserve_zones)
-        solar_rsv_by_zone = Dict(z => intersect(SOLAR_RSV, resources_in_zone_by_rid(gen, z)) for z in reserve_zones)
-        wind_rsv_by_zone = Dict(z => intersect(WIND_RSV, resources_in_zone_by_rid(gen, z)) for z in reserve_zones)
+        reserve_zones = inputs["OPERATIONAL_RESERVE_REGIONS"]
+        resource_region = inputs["OPERATIONAL_RESERVE_RESOURCE_REGION"]
+        region_zones = inputs["OPERATIONAL_RESERVE_REGION_ZONES"]
+        assigned_local(set, r) = [y for y in set
+                                  if resource_region[y] == r &&
+                                     (!inputs["OPERATIONAL_RESERVE_CUSTOM_REGIONS"] ||
+                                      zone_id(gen[y]) in region_zones[r])]
+        physically_in_region(set, r) = [y for y in set if zone_id(gen[y]) in region_zones[r]]
+        reg_by_zone = Dict(r => assigned_local(inputs["REG"], r) for r in reserve_zones)
+        rsv_by_zone = Dict(r => assigned_local(inputs["RSV"], r) for r in reserve_zones)
+        solar_reg_by_zone = Dict(r => physically_in_region(SOLAR_REG, r) for r in reserve_zones)
+        wind_reg_by_zone = Dict(r => physically_in_region(WIND_REG, r) for r in reserve_zones)
+        solar_rsv_by_zone = Dict(r => physically_in_region(SOLAR_RSV, r) for r in reserve_zones)
+        wind_rsv_by_zone = Dict(r => physically_in_region(WIND_RSV, r) for r in reserve_zones)
         transfer_lines = inputs["OPERATIONAL_RESERVE_TRANSFER_LINES"]
+        transfer_region = inputs["OPERATIONAL_RESERVE_TRANSFER_REGION"]
         incoming_lines = Dict(z => [l for l in transfer_lines
-                                    if inputs["pTrans_End_Zone"][l] == z]
+                                    if transfer_region[l] == z]
             for z in reserve_zones)
         transfer_delivery(l) = setup["Trans_Loss_Segments"] == 1 ?
                                1 - inputs["pPercent_Loss"][l] : 1.0
         @expression(EP, eRegReqVreStor[z in reserve_zones, t = 1:T],
-            inputs["pReg_Req_VRE"][z] *
-            sum(inputs["pP_Max_Solar"][y, t] * EP[:eTotalCap_SOLAR][y] * by_rid(y, :etainverter)
+            sum((inputs["OPERATIONAL_RESERVE_CUSTOM_REGIONS"] ?
+                 inputs["pReg_Req_VRE_By_Zone"][zone_id(gen[y])] :
+                 inputs["pReg_Req_VRE"][z]) *
+                inputs["pP_Max_Solar"][y, t] * EP[:eTotalCap_SOLAR][y] * by_rid(y, :etainverter)
                 for y in solar_reg_by_zone[z]) +
-            inputs["pReg_Req_VRE"][z] *
-            sum(inputs["pP_Max_Wind"][y, t] * EP[:eTotalCap_WIND][y]
+            sum((inputs["OPERATIONAL_RESERVE_CUSTOM_REGIONS"] ?
+                 inputs["pReg_Req_VRE_By_Zone"][zone_id(gen[y])] :
+                 inputs["pReg_Req_VRE"][z]) *
+                inputs["pP_Max_Wind"][y, t] * EP[:eTotalCap_WIND][y]
                 for y in wind_reg_by_zone[z]))
         @expression(EP, eRsvReqVreStor[z in reserve_zones, t = 1:T],
-            inputs["pRsv_Req_VRE"][z] *
-            sum(inputs["pP_Max_Solar"][y, t] * EP[:eTotalCap_SOLAR][y] * by_rid(y, :etainverter)
+            sum((inputs["OPERATIONAL_RESERVE_CUSTOM_REGIONS"] ?
+                 inputs["pRsv_Req_VRE_By_Zone"][zone_id(gen[y])] :
+                 inputs["pRsv_Req_VRE"][z]) *
+                inputs["pP_Max_Solar"][y, t] * EP[:eTotalCap_SOLAR][y] * by_rid(y, :etainverter)
                 for y in solar_rsv_by_zone[z]) +
-            inputs["pRsv_Req_VRE"][z] *
-            sum(inputs["pP_Max_Wind"][y, t] * EP[:eTotalCap_WIND][y]
+            sum((inputs["OPERATIONAL_RESERVE_CUSTOM_REGIONS"] ?
+                 inputs["pRsv_Req_VRE_By_Zone"][zone_id(gen[y])] :
+                 inputs["pRsv_Req_VRE"][z]) *
+                inputs["pP_Max_Wind"][y, t] * EP[:eTotalCap_WIND][y]
                 for y in wind_rsv_by_zone[z]))
     else
         @expression(EP, eRegReqVreStor[t = 1:T],

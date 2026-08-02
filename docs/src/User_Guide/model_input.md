@@ -30,6 +30,7 @@ Additionally, the user may need to specify eight more **settings-specific** inpu
 7. Vre\_and\_stor\_solar\_variability.csv: specify time-series of capacity factor/availability for each solar PV resource that exists for every co-located VRE and storage resource (in DC terms).
 8. Vre\_and\_stor\_wind\_variability.csv: specify time-series of capacity factor/availability for each wind resource that exists for every co-located VRE and storage resource (in AC terms).
 9. Hydrogen\_demand.csv: specify regional hydrogen production requirements.
+10. Minimum\_commitment\_coal.csv and Minimum\_commitment\_gas.csv: optionally specify separate zonal, hourly minimum online-capacity fractions for selected coal and natural-gas resources with unit commitment.
 
 
 !!! note "Note"
@@ -64,9 +65,11 @@ This input file contains input parameters related to: 1) definition of model zon
 |**Settings-specific Columns**|
 |**Multiple zone model**||
 |Network\_zones | Unique names for each zone in the model. **Note**: Only the number of zones (i.e., the length of the column) is used; the specific values are not referenced in the model.|
-|Network\_Lines | Numerical index for each network line. **Note**: The length of this column is counted but the actual values are not used.|
+|Network\_Lines | Unique integer identifier for each network line. It is also used to identify lines in line-power-limit slack inputs and outputs when `LinePowerFlowLimits = 1`.|
 | z* (Network map) **OR** Start\_Zone, End\_Zone | See below |
 |Line\_Max\_Flow\_MW | Existing capacity of the inter-regional transmission line.|
+|**LinePowerFlowLimits = 1**||
+|Line\_Power\_Profile\_ID | Case-sensitive reusable profile name, or the exact reserved value `None` for an unconstrained line.|
 |**NetworkExpansion = 1**||
 |Line\_Max\_Reinforcement\_MW |Maximum allowable capacity addition to the existing transmission line.|
 |Line\_Reinforcement\_Cost\_per\_MWyr | Cost of adding new capacity to the inter-regional transmission line.|
@@ -108,6 +111,28 @@ Network_Lines, z1, z2, z3,
 
 Note that in either case, positive flows indicate flow from start to end zone;
 negative flows indicate flow from end to start zone.
+
+When `LinePowerFlowLimits = 1`, `system/Line_power_flow_limits.csv` contains
+`Time_Index` and one pair of columns for every profile referenced by
+`Line_Power_Profile_ID`:
+
+```csv
+Time_Index,西北直流_up,西北直流_down,南方直流A_up,南方直流A_down
+1,0.80,0.30,0.90,0.55
+2,0.85,0.35,0.88,0.50
+```
+
+The loader constructs the column names directly as `<profile>_up` and
+`<profile>_down`; it does not parse suffixes to recover the profile name.
+Names are case-sensitive and may contain Unicode, digits, underscores,
+hyphens, and internal spaces. Empty names, leading or trailing whitespace,
+control characters, and the reserved value `None` as a real profile name are
+not allowed. Multiple lines may reference the same pair of columns.
+
+Every referenced profile must have both columns, and unreferenced profile
+columns are rejected. `Time_Index` must be exactly `1:T`, and all values must
+satisfy `-1 <= down <= up <= 1`. The values are per unit and are not affected
+by `ParameterScale`.
 
 
 ### 1.3 Demand\_data.csv (Load\_data.csv)
@@ -213,7 +238,8 @@ Each file contains cost and performance parameters for various generators and ot
 ||Model = 1: If the power plant relies on thermal energy input and subject unit commitment constraints/decisions if `UCommit >= 1` (e.g. cycling decisions/costs/constraints). |
 ||Model = 2: If the power plant relies on thermal energy input and is subject to simplified economic dispatch constraints (ramping limits and minimum output level but no cycling decisions/costs/constraints). |
 |Cap\_size | Size (MW) of a single generating unit. This is used for resources with integer unit commitment (`Model = 1`). |
-|Min\_Power |[0,1], The minimum generation level for a unit as a fraction of total capacity. This value cannot be higher than the smallest time-dependent CF value for a resource in `Generators_variability.csv`.|
+|Min\_Power |[0,1], The default minimum generation level for a unit as a fraction of total capacity. For committed thermal resources with a valid `MinVar` tag, the hourly profile replaces this value rather than multiplying it.|
+|MinVar |Shared-profile tag for an hourly absolute minimum-power fraction in `Generators_variability.csv`. Used for `Model = 1` thermal resources with `UCommit >= 1` and `NarrowVariability = 1`. Use `None` or omit the column to retain the static `Min_Power` value. Multiple resources may share a tag.|
 |Ramp\_Up\_Percentage |[0,1], Maximum increase in power output from between two periods (typically hours), reported as a fraction of nameplate capacity.|
 |Ramp\_Dn\_Percentage |[0,1], Maximum decrease in power output from between two periods (typically hours), reported as a fraction of nameplate capacity.|
 |**PiecewiseFuelUsage-related parameters**|
@@ -667,6 +693,25 @@ This file contains the time-series of capacity factors / availability of each re
 1) First column: The first column contains the time index of each row (starting in the second row) from 1 to N.
 2) Second column onwards: Resources are listed from the second column onward with headers matching each resource name in the resource `.csv` file in the   `resources` folder in any order. The availability for each resource at each time step is defined as a fraction of installed capacity and should be between 0 and 1. Note that for this reason, resource names specified in the resource `.csv` file must be unique. Note that for Hydro reservoir resources (i.e. `Hydro.csv`), values in this file correspond to inflows (in MWhs) to the hydro reservoir as a fraction of installed power capacity, rather than hourly capacity factor. Note that for co-located VRE and storage resources, solar PV and wind resource profiles should not be located in this file but rather in separate variability files (these variabilities can be in the `Generators_variability.csv` if time domain reduction functionalities will be utilized because the time domain reduction functionalities will separate the files after the clustering is completed).
 
+With `NarrowVariability = 1`, `Thermal.csv` may use `MinVar` tags to reference additional shared columns in this file. Each value is the absolute hourly minimum output fraction for an online unit and directly replaces the resource's static `Min_Power`; it is not a multiplier. For every committed thermal resource and hour, GenX validates that `MinVar` lies in `[0,1]` and does not exceed `MaxVar`. The hourly minimum is used consistently in minimum generation, regulation-reserve, startup, shutdown, and ramping constraints.
+
+#### 1.5.1 Minimum\_commitment\_coal.csv and Minimum\_commitment\_gas.csv (optional)
+
+This optional file imposes a zonal, hourly lower bound on aggregate online capacity for selected thermal resources with `Model = 1` when `UCommit >= 1`. The first column is `Time_Index`; subsequent columns are named `Zone_1`, `Zone_2`, ..., `Zone_Z`. Values are fractions between 0 and 1, and omitted zones are unconstrained.
+
+Add a `Minimum_Commitment` column to `Thermal.csv`. Set it to `1` for every coal or natural-gas resource included in either constraint, including candidate resources when new capacity should be covered, and `0` for other resources. GenX separates marked resources by the `Fuel` prefix: `coal*` resources use `Minimum_commitment_coal.csv`, while `naturalgas*` resources use `Minimum_commitment_gas.csv`. For example, `Zone_1 = 0.7` requires the aggregate committed capacity of marked resources in that fuel group and Zone 1 to be at least 70% of their aggregate installed capacity. Mathematically, GenX enforces `sum(Cap_Size[y] * vCOMMIT[y,t]) >= fraction[z,t] * sum(eTotalCap[y])` separately for coal and gas. This constrains online capacity rather than generation output `vP`. With `UCommit = 2`, committed capacity is continuous, so the constraint does not require an integer number of units.
+
+Example:
+
+```csv
+Time_Index,Zone_1,Zone_2
+1,0.70,0.60
+2,0.70,0.60
+3,0.65,0.50
+```
+
+Place the full-resolution inputs in the configured system-data directory, normally `system/Minimum_commitment_coal.csv` for coal and `system/Minimum_commitment_gas.csv` for gas. Either file may be omitted to disable that group's constraint. Without time-domain reduction, GenX reads these files directly. When TDR is run, GenX extracts the same representative-period rows used for the other hourly inputs and writes aligned profiles into the TDR output directory automatically; users should not prepare reduced files manually. Each active file must contain exactly one row per model time step.
+
 ###### Table 21: Structure of the Generator\_variability.csv file
 ---
 |**Column Name** | **Description**|
@@ -706,24 +751,28 @@ This file contains the time-series of capacity factors / availability of the win
 
 This file includes parameter inputs needed to model time-dependent procurement of regulation and spinning reserves. This file is needed if `OperationalReserves` flag is activated in the YAML file `genx_settings.yml`.
 
-For system-wide reserves (`OperationalReserves = 1`), the file uses its first data row and the `Zone` column is optional. For zonal reserves (`OperationalReserves = 2`), the `Zone` column is required and each row defines one zone that receives local regulation and spinning-reserve constraints. Zones omitted from the file receive no operational-reserve constraint. This allows generation-only nodes, such as remote generation hubs, to remain outside the reserve regions without relying on hard-coded zone numbers.
+For system-wide reserves (`OperationalReserves = 1`), the file uses its first data row and the `Zone` column is optional. With `OperationalReserves = 2`, the legacy format uses `Zone` and creates one reserve region per listed model zone. Alternatively, the custom-region format uses `Reserve_Region` and `Zones`. The recommended layout has one row per physical zone; `Reserve_Region` may repeat for zones that share reserves. Demand and VRE requirements are calculated using each zone's own percentages and then summed within the reserve region. For backward compatibility, one row may contain a semicolon-separated zone list such as `"1;2;3"`; those zones then share the percentages on that row. Reserve-region identifiers must be consecutive integers beginning at 1.
 
-In zonal mode, a line in `Network.csv` is treated as an operational-reserve delivery path when its `Start_Zone` is omitted from `Operational_reserves.csv` and its `End_Zone` is listed. Reserve-capable resources at the start zone may then supply the end zone through that line. Exported reserves share the start zone's available reserve provision, are limited by the line capacity remaining after scheduled power flow, and are derated by the line-loss percentage when linear transmission losses are used. This prevents a remote resource or transmission path from being counted more than once.
+The custom-region format requires `resources/policy_assignments/Resource_operational_reserve.csv`. Its first column is `Resource`; the remaining binary columns are `Reserve_Region_1`, `Reserve_Region_2`, and so on. A reserve-capable resource must belong to exactly one region and cannot be counted in multiple regions. Resource assignment is independent of the resource's physical model zone, so a remote generation base can be assigned directly to its receiving reserve region.
+
+In the legacy zonal format, a line in `Network.csv` is treated as an operational-reserve delivery path when its `Start_Zone` is omitted from `Operational_reserves.csv` and its `End_Zone` is listed. In the custom-region format, a resource located outside its assigned region must have a direct `Network.csv` line from its physical zone to one of the region's `Zones`. GenX automatically routes that resource's reserve contribution through the matching line. Delivered reserves are reduced by modeled line losses and share the line capacity remaining after scheduled power flow; a missing direct line raises an input error. Each reserve region is otherwise treated as a copper plate, and multi-hop reserve delivery is not inferred.
 
 ###### Table 22: Structure of the Operational_reserves.csv file
 ---
 |**Column Name** | **Description**|
 | :------------ | :-----------|
-|Zone |Required for `OperationalReserves = 2`. Model-zone number receiving a local operational-reserve constraint. Each zone may appear at most once.|
-|Reg\_Req\_Percent\_Demand |[0,1], Regulation requirement as a percent of time-dependent demand. Demand is summed across all zones for `OperationalReserves = 1` and evaluated separately in each zone for `OperationalReserves = 2`.|
-|Reg\_Req\_Percent\_VRE |[0,1], Regulation requirement as a percent of time-dependent wind and solar generation (system-wide for mode 1 and zonal for mode 2).|
-|Rsv\_Req\_Percent\_Demand [0,1], |Spinning up or contingency reserve requirement as a percent of time-dependent demand (system-wide for mode 1 and zonal for mode 2).|
-|Rsv\_Req\_Percent\_VRE |[0,1], Spinning up or contingency reserve requirement as a percent of time-dependent wind and solar generation (system-wide for mode 1 and zonal for mode 2).|
-|Unmet\_Rsv\_Penalty\_Dollar\_per\_MW |Penalty for not meeting time-dependent spinning reserve requirement (USD/MW per time step).|
+|Zone |Required for the legacy `OperationalReserves = 2` format. Model-zone number receiving a local operational-reserve constraint. Each zone may appear at most once.|
+|Reserve\_Region |Required for the custom-region format. Consecutive region number beginning at 1.|
+|Zones |Required for the custom-region format. Physical model zone receiving the row's requirement percentages. A semicolon-separated list remains supported when multiple zones share identical percentages.|
+|Reg\_Req\_Percent\_Demand |[0,1], Regulation requirement as a percent of time-dependent demand. In custom-region mode it is applied to the row's zone before zone requirements are summed by reserve region.|
+|Reg\_Req\_Percent\_VRE |[0,1], Regulation requirement as a percent of time-dependent wind and solar generation. In custom-region mode it is applied separately to the row's zone.|
+|Rsv\_Req\_Percent\_Demand [0,1], |Spinning or contingency reserve requirement as a percent of the row's zone demand before regional aggregation.|
+|Rsv\_Req\_Percent\_VRE |[0,1], Spinning or contingency reserve requirement as a percent of the row's zone wind and solar generation before regional aggregation.|
+|Unmet\_Rsv\_Penalty\_Dollar\_per\_MW |Regional penalty for unmet spinning reserve (USD/MW per time step); it must be identical for all rows in one reserve region.|
 |Dynamic\_Contingency |Flags to include capacity (generation or transmission) contingency to be added to the spinning reserve requirement. In zonal mode this flag must have the same value in every row.|
 |Dynamic\_Contingency |= 1: contingency set to be equal to largest installed thermal unit (only applied when `UCommit = 1`).|
 ||= 2: contingency set to be equal to largest committed thermal unit each time period (only applied when `UCommit = 1`).|
-|Static\_Contingency\_MW |A fixed static contingency in MW added to the reserve requirement. In zonal mode this value applies to the zone identified by that row. Applied when `UCommit = 1` and `DynamicContingency = 0`, or when `UCommit = 2`. Contingency term is omitted when this value is 0 and dynamic contingency is inactive.|
+|Static\_Contingency\_MW |A regional fixed contingency in MW added once to the regional requirement. It must be identical for all rows in one reserve region and is not summed across zones.|
 
 
 

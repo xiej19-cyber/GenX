@@ -40,3 +40,8 @@ Pages = ["configure_cbc.jl"]
 Modules = [GenX]
 Pages = ["configure_scip.jl"]
 ```
+## COPT
+
+```@docs
+GenX.configure_copt
+```

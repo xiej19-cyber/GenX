@@ -146,10 +146,14 @@ function investment_energy!(EP::Model, inputs::Dict, setup::Dict)
         eTotalCapEnergy[y]>=min_cap_mwh(gen[y]))
 
     # Max and min constraints on energy storage capacity built (as proportion to discharge power capacity)
+    # A small tolerance prevents fixed power/energy pairs that are mathematically at an
+    # exact duration limit from becoming infeasible after floating-point input scaling
+    # (for example, 4.8 GWh versus 6 * 0.8 GW = 4.800000000000001 GWh).
+    duration_tolerance = 1e-9
     @constraint(EP,
         cMinCapEnergyDuration[y in STOR_ALL],
-        eTotalCapEnergy[y]>=min_duration(gen[y]) * eTotalCap[y])
+        eTotalCapEnergy[y]>=min_duration(gen[y]) * eTotalCap[y] - duration_tolerance)
     @constraint(EP,
         cMaxCapEnergyDuration[y in STOR_ALL],
-        eTotalCapEnergy[y]<=max_duration(gen[y]) * eTotalCap[y])
+        eTotalCapEnergy[y]<=max_duration(gen[y]) * eTotalCap[y] + duration_tolerance)
 end
