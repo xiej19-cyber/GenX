@@ -80,6 +80,12 @@ WeightTotal: 8760
   #   number of timesteps in the raw input data.
 ClusterFuelPrices: 1
 
+  #   - SeasonalClustering
+  # Set to 1 to select exactly one representative week from each meteorological
+  # season. This mode requires 52 complete weeks, MinPeriods=MaxPeriods=4,
+  # TimestepsPerRepPeriod=168, and UseExtremePeriods=0.
+SeasonalClustering: 0
+
   #   - UseExtremePeriods
   #   Either 'yes' or 'no', this designates whether or not to include
   #   outliers (by performance or demand/resource extreme) as their own representative periods.

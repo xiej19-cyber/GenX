@@ -58,8 +58,25 @@ Test.@test round(R[2], digits = 1) == 1   # Rand index should be equal to 1
 Test.@test round(I, digits = 1) == 1      # Mutual information should be equal to 1
 
 # test if output files are correct
-for file in filter(endswith(".csv"), readdir(TDR_Results_true))
+for file in filter(f -> endswith(f, ".csv") && f != "Demand_data.csv",
+    readdir(TDR_Results_true))
     Test.@test cmp_csv(joinpath(TDR_Results_test, file), joinpath(TDR_Results_true, file))
+end
+
+# Demand extremes intentionally change demand output relative to the legacy
+# golden file. Validate the required invariant instead: weighted annual zonal
+# demand must equal the full-resolution input.
+raw_demand = GenX.get_demand_dataframe(joinpath(test_folder, "system"))
+tdr_demand = GenX.get_demand_dataframe(TDR_Results_test)
+num_reps = Int(tdr_demand.Rep_Periods[1])
+hours_per_rep = Int(tdr_demand.Timesteps_per_Rep_Period[1])
+weights = collect(skipmissing(tdr_demand.Sub_Weights))[1:num_reps]
+demand_columns = filter(n -> startswith(n, "Demand_MW_"), names(raw_demand))
+for column in demand_columns
+    represented_total = sum(
+        sum(tdr_demand[(rep - 1) * hours_per_rep + 1:rep * hours_per_rep, column]) *
+        weights[rep] / hours_per_rep for rep in 1:num_reps)
+    Test.@test represented_total ≈ sum(raw_demand[!, column]) rtol = 1e-10
 end
 
 # Constant demand profiles are removed before clustering and must not be used
@@ -76,5 +93,44 @@ demand_mults = GenX.get_demand_multipliers(cluster_output,
     1,
     2)
 Test.@test demand_mults == Dict(:Demand_MW_z1 => 2.0)
+
+# A demand extreme remains unscaled while non-extreme periods are calibrated
+# to preserve the original annual energy exactly.
+extreme_cluster_output = DataFrames.DataFrame(
+    Symbol("1") => [1.0, 1.0],
+    Symbol("2") => [4.0, 4.0],
+)
+extreme_input = DataFrames.DataFrame(Demand_MW_z1 = fill(2.0, 8))
+extreme_mults = GenX.get_demand_multipliers_preserving_extremes(
+    extreme_cluster_output,
+    extreme_input,
+    [1, 2],
+    [6.0, 2.0],
+    [:Demand_MW_z1],
+    2,
+    [:Demand_MW_z1, :GrpWeight],
+    2,
+    1,
+    [2],
+)
+Test.@test extreme_mults[:Demand_MW_z1][2] == 1.0
+Test.@test extreme_mults[:Demand_MW_z1][1] ≈ 4 / 3
+weighted_demand = 6 / 2 * sum([1.0, 1.0] .* extreme_mults[:Demand_MW_z1][1]) +
+                  2 / 2 * sum([4.0, 4.0] .* extreme_mults[:Demand_MW_z1][2])
+Test.@test weighted_demand ≈ sum(extreme_input.Demand_MW_z1)
+
+# Four-week seasonal clustering always retains one representative from each
+# meteorological season and maps every source week to its own season.
+seasonal_input = DataFrames.DataFrame(
+    Dict(Symbol(i) => [Float64(i), Float64(i % 7)] for i in 1:52),
+)
+_, seasonal_assignments, seasonal_weights, seasonal_reps, _ =
+    GenX.cluster_four_seasons(seasonal_input, "kmeans", 2, false, false)
+season_ranges = [Set(9:21), Set(22:34), Set(35:47), Set([48:52; 1:8])]
+Test.@test length(seasonal_reps) == 4
+Test.@test all(seasonal_reps[s] in season_ranges[s] for s in 1:4)
+Test.@test seasonal_weights == [13, 13, 13, 13]
+Test.@test all(seasonal_assignments[p] == s
+    for s in 1:4 for p in season_ranges[s])
 
 end # module TestTDR

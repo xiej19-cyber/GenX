@@ -421,6 +421,39 @@ end
     end
 end
 
+@testset "concatenated multi-stage TDR extracts aligned line-profile rows" begin
+    mktempdir() do temp_dir
+        setup = Dict{Any, Any}("SystemFolder" => "system")
+        for (stage, offset) in ((1, 0.0), (2, 0.4))
+            raw_dir = joinpath(temp_dir, "inputs", "inputs_p$stage", "system")
+            mkpath(raw_dir)
+            CSV.write(joinpath(raw_dir, "Demand_data.csv"),
+                DataFrame(Time_Index = 1:4))
+            CSV.write(joinpath(raw_dir, "Line_power_flow_limits.csv"),
+                DataFrame(
+                    Time_Index = 1:4,
+                    A_up = offset .+ [0.1, 0.2, 0.3, 0.4],
+                    A_down = offset .+ [-0.6, -0.5, -0.4, -0.3],
+                ))
+        end
+        output_dir = joinpath(temp_dir, "TDR_results")
+        mkpath(output_dir)
+
+        output = GenX.write_tdr_line_power_flow_limits_from_raw_multistage_concat(
+            temp_dir, setup, 2, output_dir, [2, 4], 2, ["A"])
+
+        @test output.Time_Index == 1:4
+        @test output.A_up ≈ [0.3, 0.4, 0.7, 0.8]
+        @test output.A_down ≈ [-0.4, -0.3, 0.0, 0.1]
+        @test isfile(joinpath(output_dir, "Line_power_flow_limits.csv"))
+
+        rm(joinpath(temp_dir, "inputs", "inputs_p2", "system",
+            "Line_power_flow_limits.csv"))
+        @test_throws ErrorException GenX.write_tdr_line_power_flow_limits_from_raw_multistage_concat(
+            temp_dir, setup, 2, output_dir, [2], 2, ["A"])
+    end
+end
+
 @testset "balance and dual outputs restore MW and USD per MWh" begin
     inputs = Dict{Any, Any}(
         "T" => 2,

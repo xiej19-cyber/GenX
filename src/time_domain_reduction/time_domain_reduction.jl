@@ -567,6 +567,102 @@ function get_demand_multipliers(ClusterOutputData,
     return demand_mults
 end
 
+"""
+    get_demand_multipliers_preserving_extremes(ClusterOutputData, InputData, M,
+        W, DemandCols, TimestepsPerRepPeriod, NewColNames, NClusters, Ncols,
+        extreme_periods)
+
+Return one demand multiplier per zone and representative period. Demand in an
+explicitly selected extreme period is left unchanged, while all other
+representative periods receive a common zone-specific multiplier chosen so
+that weighted annual demand exactly matches the full-resolution input.
+"""
+function get_demand_multipliers_preserving_extremes(
+        ClusterOutputData,
+        InputData,
+        M,
+        W,
+        DemandCols,
+        TimestepsPerRepPeriod,
+        NewColNames,
+        NClusters,
+        Ncols,
+        extreme_periods)
+    scalable_demand_cols = intersect(DemandCols, propertynames(InputData))
+    extreme_set = Set(Int.(extreme_periods))
+    multipliers = Dict{Symbol, Vector{Float64}}()
+
+    for demandcol in scalable_demand_cols
+        col_index = findfirst(==(demandcol), Symbol.(NewColNames[1:Ncols]))
+        isnothing(col_index) && continue
+        original_total = sum(InputData[:, demandcol])
+        fixed_total = 0.0
+        adjustable_total = 0.0
+
+        for m in 1:NClusters
+            first_index = TimestepsPerRepPeriod * (col_index - 1) + 1
+            last_index = TimestepsPerRepPeriod * col_index
+            period_values = ClusterOutputData[!, m][first_index:last_index]
+            weighted_total =
+                W[m] / TimestepsPerRepPeriod * sum(period_values)
+            if M[m] in extreme_set
+                fixed_total += weighted_total
+            else
+                adjustable_total += weighted_total
+            end
+        end
+
+        adjustable_total > 0 || error(
+            "Cannot preserve extreme demand and annual energy for $demandcol: " *
+            "non-extreme representative periods have zero weighted demand.")
+        multiplier = (original_total - fixed_total) / adjustable_total
+        multiplier >= 0 || error(
+            "Cannot preserve extreme demand and annual energy for $demandcol: " *
+            "the fixed extreme-period contribution exceeds original annual demand.")
+        multipliers[demandcol] = [
+            M[m] in extreme_set ? 1.0 : multiplier for m in 1:NClusters
+        ]
+    end
+    return multipliers
+end
+
+"""
+    cluster_four_seasons(ClusteringInputDF, ClusterMethod, nIters, v, random)
+
+Select exactly one representative week from each meteorological season for a
+single 52-week input year. Weeks 9:21 are spring, 22:34 summer, 35:47 autumn,
+and weeks 48:52 plus 1:8 winter.
+"""
+function cluster_four_seasons(
+        ClusteringInputDF,
+        ClusterMethod,
+        nIters,
+        v = false,
+        random = true)
+    nperiods = ncol(ClusteringInputDF)
+    nperiods == 52 || error(
+        "SeasonalClustering=1 currently requires exactly 52 complete periods; " *
+        "found $nperiods.")
+    season_periods = [collect(9:21), collect(22:34), collect(35:47),
+        [collect(48:52); collect(1:8)]]
+
+    assignments = zeros(Int, nperiods)
+    weights = Int[]
+    representatives = Int[]
+    cluster_objects = Any[]
+    for (season, periods) in enumerate(season_periods)
+        season_df = select(ClusteringInputDF, string.(periods))
+        result = cluster(ClusterMethod, season_df, 1, nIters, v, random)
+        representative = periods[result[4][1]]
+        assignments[periods] .= season
+        push!(weights, length(periods))
+        push!(representatives, representative)
+        push!(cluster_objects, result[1])
+    end
+    return cluster_objects, assignments, weights, representatives,
+           pairwise(Euclidean(), Matrix(ClusteringInputDF), dims = 2)
+end
+
 function update_deprecated_tdr_inputs!(setup::Dict{Any, Any})
     if "LoadWeight" in keys(setup)
         setup["DemandWeight"] = setup["LoadWeight"]
@@ -733,6 +829,60 @@ function write_tdr_line_power_flow_limits_from_raw(
     row_idx = representative_time_indices(M, TimestepsPerRepPeriod)
     maximum(row_idx) <= nrow(raw_profile) ||
         error("TDR selected time index exceeds rows in raw $LINE_POWER_PROFILE_FILENAME.")
+
+    output = raw_profile[row_idx, :]
+    output[!, :Time_Index] = 1:nrow(output)
+    CSV.write(joinpath(output_dir, LINE_POWER_PROFILE_FILENAME), output)
+    return output
+end
+
+"""
+    write_tdr_line_power_flow_limits_from_raw_multistage_concat(
+        inpath, mysetup, NumStages, output_dir, M, TimestepsPerRepPeriod,
+        profile_names)
+
+Concatenate full-resolution line-flow profiles from every planning stage and
+extract the representative periods selected by a concatenated multi-stage TDR
+run. Each stage must provide the same profile columns.
+"""
+function write_tdr_line_power_flow_limits_from_raw_multistage_concat(
+        inpath::String,
+        mysetup::Dict{Any, Any},
+        NumStages::Int,
+        output_dir::String,
+        M,
+        TimestepsPerRepPeriod::Int,
+        profile_names::Vector{String})
+    raw_profiles = DataFrame[]
+    expected_columns = nothing
+
+    for per in 1:NumStages
+        raw_system_dir = joinpath(
+            inpath, "inputs", "inputs_p$per", mysetup["SystemFolder"])
+        raw_path = joinpath(raw_system_dir, LINE_POWER_PROFILE_FILENAME)
+        isfile(raw_path) || error(
+            "LinePowerFlowLimits=1 requires $LINE_POWER_PROFILE_FILENAME " *
+            "in every stage when MultiStageConcatenate is enabled; missing stage $per.")
+
+        ensure_unique_csv_columns(raw_path)
+        profile = load_dataframe(raw_path)
+        raw_demand = get_demand_dataframe(raw_system_dir)
+        demand_length = length(collect(skipmissing(raw_demand[!, :Time_Index])))
+        validate_line_power_profile_dataframe(profile, profile_names, demand_length)
+
+        if expected_columns === nothing
+            expected_columns = names(profile)
+        elseif names(profile) != expected_columns
+            error("Columns of $LINE_POWER_PROFILE_FILENAME must be consistent across all stages.")
+        end
+        push!(raw_profiles, profile)
+    end
+
+    raw_profile = vcat(raw_profiles...)
+    row_idx = representative_time_indices(M, TimestepsPerRepPeriod)
+    maximum(row_idx) <= nrow(raw_profile) || error(
+        "TDR selected time index exceeds rows in concatenated raw " *
+        "$LINE_POWER_PROFILE_FILENAME.")
 
     output = raw_profile[row_idx, :]
     output[!, :Time_Index] = 1:nrow(output)
@@ -958,7 +1108,21 @@ function cluster_inputs(inpath,
     DemandWeight = myTDRsetup["DemandWeight"]
     WeightTotal = myTDRsetup["WeightTotal"]
     ClusterFuelPrices = myTDRsetup["ClusterFuelPrices"]
+    SeasonalClustering = get(myTDRsetup, "SeasonalClustering", 0)
     TimeDomainReductionFolder = mysetup["TimeDomainReductionFolder"]
+
+    SeasonalClustering in (0, 1) ||
+        error("SeasonalClustering must be either 0 or 1.")
+    if SeasonalClustering == 1
+        MinPeriods == 4 && MaxPeriods == 4 || error(
+            "SeasonalClustering=1 requires MinPeriods=4 and MaxPeriods=4.")
+        UseExtremePeriods == 0 || error(
+            "SeasonalClustering=1 selects exactly four seasonal weeks and cannot " *
+            "be combined with UseExtremePeriods=1. Use the regular extreme-period " *
+            "mode with at least five periods when an additional extreme week is required.")
+        TimestepsPerRepPeriod == 168 || error(
+            "SeasonalClustering=1 currently requires TimestepsPerRepPeriod=168.")
+    end
 
     MultiStage = mysetup["MultiStage"]
     if MultiStage == 1
@@ -1266,13 +1430,18 @@ function cluster_inputs(inpath,
     ##### STEP 3: Clustering
     cluster_results = []
 
-    # Cluster once regardless of iteration decisions
-    push!(cluster_results,
-        cluster(ClusterMethod, ClusteringInputDF, NClusters, nReps, v, random))
+    if SeasonalClustering == 1
+        R, A, W, M, DistMatrix = cluster_four_seasons(
+            ClusteringInputDF, ClusterMethod, nReps, v, random)
+    else
+        # Cluster once regardless of iteration decisions
+        push!(cluster_results,
+            cluster(ClusterMethod, ClusteringInputDF, NClusters, nReps, v, random))
+    end
 
     # Iteratively add worst periods as extreme periods OR increment number of clusters k
     #    until threshold is met or maximum periods are added (If chosen in inputs)
-    if (Iterate == 1)
+    if (Iterate == 1) && (SeasonalClustering == 0)
         while (!check_condition(Threshold,
             last(cluster_results)[1],
             OldColNames,
@@ -1318,11 +1487,13 @@ function cluster_inputs(inpath,
     end
 
     # Interpret Final Clustering Result
-    R = last(cluster_results)[1]  # Cluster Object
-    A = last(cluster_results)[2]  # Assignments
-    W = last(cluster_results)[3]  # Weights
-    M = last(cluster_results)[4]  # Centers or Medoids
-    DistMatrix = last(cluster_results)[5]  # Pairwise distances
+    if SeasonalClustering == 0
+        R = last(cluster_results)[1]  # Cluster Object
+        A = last(cluster_results)[2]  # Assignments
+        W = last(cluster_results)[3]  # Weights
+        M = last(cluster_results)[4]  # Centers or Medoids
+        DistMatrix = last(cluster_results)[5]  # Pairwise distances
+    end
     if v
         println("Total Groups Assigned to Each Cluster: ", W)
         println("Sum Cluster Weights: ", sum(W))
@@ -1333,7 +1504,8 @@ function cluster_inputs(inpath,
     # Set clustering outputs in correct numeric order.
     # Add the subperiods corresponding to the extreme periods back into the data.
     # Rescale weights to total user-specified number of hours (e.g., 8760 for one year).
-    # If DemandExtremePeriod=false (because we don't want to change peak demand day), rescale demand to ensure total demand is equal.
+    # Preserve demand extremes while rescaling the remaining representative
+    # periods so weighted annual zonal demand remains equal to the input.
 
     ### K-means/medoids returns indices from DistMatrix as its medoids.
     #   This does not account for missing extreme weeks nor "alphabetical" ordering of numeric columns (i.e., 1, 10, 11, ...).
@@ -1341,7 +1513,9 @@ function cluster_inputs(inpath,
     #   Optional to do later: reorder ClusterInputDF numerically before clustering instead
 
     # ClusterInputDF Reframing of Centers/Medoids (i.e., alphabetical as opposed to indices, same order)
-    M = [parse(Int64, string(names(ClusteringInputDF)[i])) for i in M]
+    if SeasonalClustering == 0
+        M = [parse(Int64, string(names(ClusteringInputDF)[i])) for i in M]
+    end
     if v
         println("Fixed M: ", M)
     end
@@ -1349,9 +1523,11 @@ function cluster_inputs(inpath,
     # ClusterInputDF Ordering of All Periods (i.e., alphabetical as opposed to indices)
     A_Dict = Dict()   # States index of representative period within M for each period a in A
     M_Dict = Dict()   # States representative period m for each period a in A
-    for i in 1:length(A)
-        A_Dict[parse(Int64, string(names(ClusteringInputDF)[i]))] = A[i]
-        M_Dict[parse(Int64, string(names(ClusteringInputDF)[i]))] = M[A[i]]
+    if SeasonalClustering == 0
+        for i in 1:length(A)
+            A_Dict[parse(Int64, string(names(ClusteringInputDF)[i]))] = A[i]
+            M_Dict[parse(Int64, string(names(ClusteringInputDF)[i]))] = M[A[i]]
+        end
     end
 
     # Add extreme periods into the clustering result with # of occurences = 1 for each
@@ -1372,7 +1548,9 @@ function cluster_inputs(inpath,
     end
 
     # Recreate A in numeric order (as opposed to ClusterInputDF order)
-    A = [A_Dict[i] for i in 1:(length(A) + length(ExtremeWksList))]
+    if SeasonalClustering == 0
+        A = [A_Dict[i] for i in 1:(length(A) + length(ExtremeWksList))]
+    end
 
     N = W  # Keep cluster version of weights stored as N, number of periods represented by RP
 
@@ -1405,9 +1583,23 @@ function cluster_inputs(inpath,
     # Cluster Ouput: The original data at the medoids/centers
     ClusterOutputData = ModifiedData[:, Symbol.(M)]
 
-    # Get zone-wise demand multipliers for later scaling in order for weighted-representative-total-zonal demand to equal original total-zonal demand
-    #  (Only if we don't have demand-related extreme periods because we don't want to change peak demand periods)
-    if !DemandExtremePeriod
+    # Get zone-wise demand multipliers for later scaling. With a demand extreme,
+    # preserve that representative period exactly and scale only the remaining
+    # periods so annual zonal demand is still conserved.
+    if DemandExtremePeriod
+        demand_mults = get_demand_multipliers_preserving_extremes(
+            ClusterOutputData,
+            InputData,
+            M,
+            W,
+            DemandCols,
+            TimestepsPerRepPeriod,
+            NewColNames,
+            NClusters,
+            Ncols,
+            ExtremeWksList,
+        )
+    else
         demand_mults = get_demand_multipliers(ClusterOutputData,
             InputData,
             M,
@@ -1459,9 +1651,9 @@ function cluster_inputs(inpath,
         #   Scale dmDF but not rpDF which compares to input data but is not written to file.
         for demandcol in DemandCols
             if demandcol ∉ ConstCol_Syms
-                if !DemandExtremePeriod
-                    dmDF[!, demandcol] .*= demand_mults[demandcol]
-                end
+                multiplier = DemandExtremePeriod ?
+                             demand_mults[demandcol][m] : demand_mults[demandcol]
+                dmDF[!, demandcol] .*= multiplier
             end
         end
 
@@ -1596,6 +1788,17 @@ function cluster_inputs(inpath,
                     write_tdr_minimum_commitment_from_raw_multistage_concat(
                         inpath, mysetup, NumStages, dirname(out_gvar_path), M,
                         TimestepsPerRepPeriod; filename = filename)
+                end
+                if mysetup["LinePowerFlowLimits"] == 1
+                    write_tdr_line_power_flow_limits_from_raw_multistage_concat(
+                        inpath,
+                        mysetup,
+                        NumStages,
+                        dirname(out_gvar_path),
+                        M,
+                        TimestepsPerRepPeriod,
+                        inputs_dict[per]["LINE_POWER_LIMIT_PROFILE_NAMES"],
+                    )
                 end
 
                 # Keep this for the VRE-STOR block below.
@@ -1749,6 +1952,15 @@ function cluster_inputs(inpath,
                 write_tdr_minimum_commitment_from_raw(
                     dirname(raw_gvar_path), dirname(out_gvar_path), M,
                     TimestepsPerRepPeriod; filename = filename)
+            end
+            if mysetup["LinePowerFlowLimits"] == 1
+                write_tdr_line_power_flow_limits_from_raw(
+                    dirname(raw_gvar_path),
+                    dirname(out_gvar_path),
+                    M,
+                    TimestepsPerRepPeriod,
+                    myinputs["LINE_POWER_LIMIT_PROFILE_NAMES"],
+                )
             end
 
             NewGVColNames = names(GVOutputData)
