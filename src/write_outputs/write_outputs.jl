@@ -815,7 +815,7 @@ function write_temporal_data(
         write_annual(filepath, df_annual)
     else # setup["WriteOutputs"] == "full"
         df_full = write_fulltimeseries(filepath, data, df_annual)
-        if setup["OutputFullTimeSeries"] == 1 && setup["TimeDomainReduction"] == 1
+        if setup["OutputFullTimeSeries"] == 1
             write_full_time_series_reconstruction(path, setup, df_full, filename)
             @info("Writing Full Time Series for "*filename)
         end
@@ -829,14 +829,13 @@ end
                             name::String)
 Create a DataFrame with all 8,760 hours of the year from the reduced output.
 
-This function calls `full_time_series_reconstruction()``, which uses Period_map.csv to create a new DataFrame with 8,760 time steps, as well as other pre-existing rows such as "Zone".
-For each 52 weeks of the year, the corresponding representative week is taken from the input DataFrame and copied into the new DataFrame. Representative periods that 
-represent more than one week will appear multiple times in the output. 
+This function calls `full_time_series_reconstruction()` to create a new DataFrame with 8,760 time steps, as well as other pre-existing rows such as "Zone".
+When GenX TDR is enabled, `Period_map.csv` maps each modeled week to its representative week. When TDR is disabled and the user supplies exactly four 168-hour weeks, input order is interpreted as spring, summer, autumn, and winter and the weeks are repeated over their corresponding calendar months.
 
 Note: Currently, TDR only gives the representative periods in Period_map for 52 weeks, when a (non-leap) year is 52 weeks + 24 hours. This function takes the last 24 hours of 
 the time series and copies them to get up to all 8,760 hours in a year.
 
-This function is called when output files with time series data (e.g. power.csv, emissions.csv) are created, if the setup key "OutputFullTimeSeries" is set to "1".
+This function is called when output files with time series data (e.g. power.csv, emissions.csv) are created, if the setup key "OutputFullTimeSeries" is set to "1". Reconstruction only expands output rows and does not change model weights or annual results.
 
 # Arguments
 - `path` (AbstractString): Path input to the results folder

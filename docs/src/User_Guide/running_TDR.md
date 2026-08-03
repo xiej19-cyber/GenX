@@ -50,6 +50,22 @@ The time series data are written in single unbroken columns: in this example, th
 
 For problems involving Long Duration Storage, a file `Period_map.csv` is necessary to describe how these representative periods occur throughout the modeled year.
 
+When inputs contain exactly four manually selected 168-hour representative
+weeks, full-year output reconstruction does not require a user-provided
+`Period_map.csv`. Set `TimeDomainReduction: 0` and `OutputFullTimeSeries: 1`.
+The four input weeks are interpreted in this order:
+
+1. March-May (spring)
+2. June-August (summer)
+3. September-November (autumn)
+4. January, February, and December (winter)
+
+Each representative week is repeated within its calendar block and truncated
+at the month boundary to produce 8,760 output hours. This reconstruction is
+display-only: it does not modify `Sub_Weights`, optimization weights, annual
+costs, annual generation, emissions, or other annual model results. With GenX
+TDR enabled, reconstruction continues to use the generated `Period_map.csv`.
+
 See also the [Time-domain reduction](@ref).
 
 ## Performing time domain reduction (TDR) separately from optimization

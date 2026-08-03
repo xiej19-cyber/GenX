@@ -2,7 +2,7 @@ module TestTDR
 
 import GenX
 import Test
-import JLD2, Clustering, DataFrames
+import JLD2, Clustering, DataFrames, CSV
 
 include(joinpath(@__DIR__, "utilities.jl"))
 
@@ -177,5 +177,34 @@ for column in names(raw_variability)
     Test.@test all(x -> 0 <= x <= 1, selected_variability[!, column])
 end
 Test.@test nrow(variability_diagnostics) == 2
+
+# With TDR disabled, four user-provided weeks can still be expanded for output.
+# Input order is spring, summer, autumn, winter; annual model weights are not
+# involved in this display-only calendar reconstruction.
+mktempdir() do manual_case
+    mkpath(joinpath(manual_case, "system"))
+    manual_demand = DataFrames.DataFrame(
+        Rep_Periods = Union{Missing, Int}[4; fill(missing, 671)],
+        Timesteps_per_Rep_Period = Union{Missing, Int}[168; fill(missing, 671)],
+        Time_Index = 1:672,
+    )
+    CSV.write(joinpath(manual_case, "system", "Demand_data.csv"), manual_demand)
+    manual_output = DataFrames.DataFrame(
+        x1 = ["Resource"; ["t$i" for i in 1:672]],
+        x2 = Any["Example"; collect(1.0:672.0)],
+    )
+    manual_setup = Dict{String, Any}(
+        "TimeDomainReduction" => 0,
+        "SystemFolder" => "system",
+    )
+    reconstructed = GenX.manual_four_week_full_time_series(
+        manual_case, manual_setup, manual_output)
+    Test.@test nrow(reconstructed) == 8761
+    Test.@test reconstructed[2, 2] == 505.0                 # January: winter
+    Test.@test reconstructed[2 + 24 * 59, 2] == 1.0        # March: spring
+    Test.@test reconstructed[2 + 24 * 151, 2] == 169.0     # June: summer
+    Test.@test reconstructed[2 + 24 * 243, 2] == 337.0     # September: autumn
+    Test.@test reconstructed[2 + 24 * 334, 2] == 505.0     # December: winter
+end
 
 end # module TestTDR

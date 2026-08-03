@@ -35,7 +35,7 @@ function write_demand(path::AbstractString, inputs::Dict, setup::Dict, EP::Model
 
         CSV.write(joinpath(path, "zonaldemand.csv"), dftranspose(dfDemandconsumption, false), writeheader = false)
 
-        if setup["OutputFullTimeSeries"] == 1 && setup["TimeDomainReduction"] == 1
+        if setup["OutputFullTimeSeries"] == 1
             write_full_time_series_reconstruction(path, setup, dfDemandconsumption, "demand")
             @info("Writing Full Time Series for Demand")
         end
