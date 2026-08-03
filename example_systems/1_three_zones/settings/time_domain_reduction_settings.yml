@@ -85,6 +85,15 @@ ClusterFuelPrices: 1
   # season. This mode requires 52 complete weeks, MinPeriods=MaxPeriods=4,
   # TimestepsPerRepPeriod=168, and UseExtremePeriods=0.
 SeasonalClustering: 0
+PeriodsPerSeason: 1
+
+  # Aggregate project-level variability into zone-by-technology features for
+  # clustering. Original project profiles are still retained in TDR outputs.
+AggregateProfilesForClustering: 1
+
+  # Preserve the full-resolution annual available hours of every generator
+  # variability profile using bounded [0,1] calibration of selected periods.
+PreserveAnnualCapacityFactors: 1
 
   #   - UseExtremePeriods
   #   Either 'yes' or 'no', this designates whether or not to include

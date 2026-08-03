@@ -627,22 +627,26 @@ function get_demand_multipliers_preserving_extremes(
 end
 
 """
-    cluster_four_seasons(ClusteringInputDF, ClusterMethod, nIters, v, random)
+    cluster_four_seasons(ClusteringInputDF, ClusterMethod, nIters, v, random;
+        periods_per_season=1)
 
-Select exactly one representative week from each meteorological season for a
-single 52-week input year. Weeks 9:21 are spring, 22:34 summer, 35:47 autumn,
-and weeks 48:52 plus 1:8 winter.
+Select the requested number of representative weeks from each meteorological
+season for a single 52-week input year. Weeks 9:21 are spring, 22:34 summer,
+35:47 autumn, and weeks 48:52 plus 1:8 winter.
 """
 function cluster_four_seasons(
         ClusteringInputDF,
         ClusterMethod,
         nIters,
         v = false,
-        random = true)
+        random = true;
+        periods_per_season::Int = 1)
     nperiods = ncol(ClusteringInputDF)
     nperiods == 52 || error(
         "SeasonalClustering=1 currently requires exactly 52 complete periods; " *
         "found $nperiods.")
+    1 <= periods_per_season <= 13 || error(
+        "PeriodsPerSeason must be between 1 and 13.")
     season_periods = [collect(9:21), collect(22:34), collect(35:47),
         [collect(48:52); collect(1:8)]]
 
@@ -650,17 +654,70 @@ function cluster_four_seasons(
     weights = Int[]
     representatives = Int[]
     cluster_objects = Any[]
-    for (season, periods) in enumerate(season_periods)
+    cluster_offset = 0
+    for periods in season_periods
         season_df = select(ClusteringInputDF, string.(periods))
-        result = cluster(ClusterMethod, season_df, 1, nIters, v, random)
-        representative = periods[result[4][1]]
-        assignments[periods] .= season
-        push!(weights, length(periods))
-        push!(representatives, representative)
+        result = cluster(
+            ClusterMethod, season_df, periods_per_season, nIters, v, random)
+        assignments[periods] .= cluster_offset .+ result[2]
+        append!(weights, result[3])
+        append!(representatives, periods[result[4]])
         push!(cluster_objects, result[1])
+        cluster_offset += periods_per_season
     end
     return cluster_objects, assignments, weights, representatives,
            pairwise(Euclidean(), Matrix(ClusteringInputDF), dims = 2)
+end
+
+"""
+    aggregate_profiles_for_clustering(normalized, demand_cols, variability_cols,
+        solar_cols, wind_cols, fuel_cols, col_to_zone_map)
+
+Build a compact clustering feature set. Demand and fuel profiles remain
+individual features, while generator variability is averaged by zone and by
+technology class (solar, wind, or other variability). Candidate-project count
+therefore no longer acts as an unintended clustering weight. This feature
+aggregation affects representative-period selection only; all original
+profiles are retained in TDR outputs.
+"""
+function aggregate_profiles_for_clustering(
+        normalized::DataFrame,
+        demand_cols,
+        variability_cols,
+        solar_cols,
+        wind_cols,
+        fuel_cols,
+        col_to_zone_map)
+    available = Set(names(normalized))
+    features = DataFrame()
+
+    for column in demand_cols
+        column in available && (features[!, Symbol(column)] = normalized[!, column])
+    end
+
+    groups = Dict{Tuple{Any, String}, Vector{String}}()
+    for column in variability_cols
+        column in available || continue
+        technology = if column in solar_cols
+            "Solar"
+        elseif column in wind_cols
+            "Wind"
+        else
+            "OtherVariability"
+        end
+        zone = get(col_to_zone_map, column, "System")
+        push!(get!(groups, (zone, technology), String[]), column)
+    end
+    for ((zone, technology), columns) in sort!(collect(groups); by = first)
+        feature_name = Symbol("TDR_$(technology)_z$(zone)")
+        features[!, feature_name] = vec(mean(Matrix(normalized[:, columns]); dims = 2))
+    end
+
+    for column in fuel_cols
+        column in available && (features[!, Symbol(column)] = normalized[!, column])
+    end
+    ncol(features) > 0 || error("No profiles are available for TDR clustering.")
+    return features
 end
 
 function update_deprecated_tdr_inputs!(setup::Dict{Any, Any})
@@ -717,6 +774,135 @@ function representative_time_indices(M, TimestepsPerRepPeriod::Int)
     return idx
 end
 
+"""
+    calibrate_tdr_variability!(output, raw, weights, TimestepsPerRepPeriod)
+
+Scale every non-time-index variability profile so its weighted annual
+available hours equal the full-resolution input. Scaling is multiplicative and
+clipped to `[0, 1]`; a monotone bisection finds the bounded multiplier. This
+preserves the selected weeks' hourly shape while preventing invalid capacity
+factors. A diagnostic table describing every adjustment is returned.
+"""
+function calibrate_tdr_variability!(
+        output::DataFrame,
+        raw::DataFrame,
+        weights,
+        TimestepsPerRepPeriod::Int)
+    profile_columns = filter(!=("Time_Index"), names(raw))
+    names(output) == profile_columns || error(
+        "TDR variability columns do not match the raw variability columns.")
+    nrow(output) == length(weights) * TimestepsPerRepPeriod || error(
+        "TDR variability rows do not match representative-period weights.")
+
+    omega = repeat(Float64.(weights) ./ TimestepsPerRepPeriod;
+        inner = TimestepsPerRepPeriod)
+    total_weight = sum(omega)
+    diagnostics = DataFrame(
+        Profile = String[],
+        OriginalAvailableHours = Float64[],
+        BeforeCalibrationHours = Float64[],
+        AfterCalibrationHours = Float64[],
+        Multiplier = Float64[],
+        ClippedTimesteps = Int[],
+    )
+
+    for column in profile_columns
+        raw_values = Float64.(raw[!, column])
+        selected_values = Float64.(output[!, column])
+        all(isfinite, raw_values) && all(>=(0), raw_values) || error(
+            "Generators_variability.csv profile $column must contain finite " *
+            "nonnegative values for annual calibration.")
+        all(isfinite, selected_values) && all(>=(0), selected_values) || error(
+            "Selected TDR variability profile $column contains invalid values.")
+
+        target = sum(raw_values)
+        target <= total_weight + 1e-8 || error(
+            "Annual available hours for $column exceed the TDR time-weight total.")
+        before = dot(selected_values, omega)
+
+        multiplier = 1.0
+        calibrated = copy(selected_values)
+        if !isapprox(before, target; atol = 1e-8, rtol = 1e-10) ||
+           any(>(1), selected_values)
+            if target == 0
+                multiplier = 0.0
+                fill!(calibrated, 0.0)
+            elseif any(>(0), selected_values)
+                max_multiplicative = dot(
+                    Float64.(selected_values .> 0), omega)
+                if target <= max_multiplicative + 1e-8
+                    lower = 0.0
+                    upper = max(1.0, target / max(before, eps()))
+                    while dot(min.(upper .* selected_values, 1.0), omega) < target
+                        upper *= 2
+                    end
+                    for _ in 1:100
+                        multiplier = (lower + upper) / 2
+                        trial = dot(min.(multiplier .* selected_values, 1.0), omega)
+                        if trial < target
+                            lower = multiplier
+                        else
+                            upper = multiplier
+                        end
+                    end
+                    multiplier = (lower + upper) / 2
+                    calibrated .= min.(multiplier .* selected_values, 1.0)
+                else
+                    # Multiplication cannot raise selected zero-output hours.
+                    # Use a bounded additive shift as the feasible fallback.
+                    multiplier = Inf
+                    lower = -maximum(selected_values)
+                    upper = 1.0
+                    for _ in 1:100
+                        shift = (lower + upper) / 2
+                        trial = dot(clamp.(selected_values .+ shift, 0.0, 1.0), omega)
+                        if trial < target
+                            lower = shift
+                        else
+                            upper = shift
+                        end
+                    end
+                    shift = (lower + upper) / 2
+                    calibrated .= clamp.(selected_values .+ shift, 0.0, 1.0)
+                end
+            else
+                # A selected profile containing only zeros cannot be repaired
+                # multiplicatively. Use the least-distorting constant profile.
+                multiplier = Inf
+                fill!(calibrated, target / total_weight)
+            end
+        end
+
+        output[!, column] = calibrated
+        after = dot(calibrated, omega)
+        isapprox(after, target; atol = 1e-6, rtol = 1e-10) || error(
+            "Annual calibration failed for variability profile $column.")
+        push!(diagnostics, (
+            column,
+            target,
+            before,
+            after,
+            multiplier,
+            count(i -> calibrated[i] >= 1 - 1e-12 && selected_values[i] < 1 - 1e-12,
+                eachindex(calibrated)),
+        ))
+    end
+    adjustment = [
+        isfinite(x) && x > 0 ? max(x, inv(x)) : Inf for x in diagnostics.Multiplier
+    ]
+    large_adjustments = count(>(1.5), adjustment)
+    large_adjustments == 0 || @warn "$large_adjustments of $(nrow(diagnostics)) " *
+        "generator variability profiles require more than a 1.5x annual " *
+        "calibration adjustment. The selected representative periods may be " *
+        "insufficient; inspect Generators_variability_diagnostics.csv."
+    heavily_clipped = count(
+        >(0.05 * nrow(output)), diagnostics.ClippedTimesteps)
+    heavily_clipped == 0 || @warn "$heavily_clipped generator variability " *
+        "profiles are clipped at 1.0 in more than 5% of selected timesteps. " *
+        "Consider increasing the number of representative periods."
+    return diagnostics
+end
+
 
 """
     write_tdr_generators_variability_from_raw(raw_gvar_path, out_gvar_path, M, TimestepsPerRepPeriod)
@@ -736,6 +922,7 @@ function write_tdr_generators_variability_from_raw(
         out_gvar_path::String,
         M,
         TimestepsPerRepPeriod::Int;
+        weights = nothing,
         v::Bool = false)
 
     raw_gv = load_dataframe(raw_gvar_path)
@@ -758,6 +945,12 @@ function write_tdr_generators_variability_from_raw(
     end
 
     gv_out = raw_gv[row_idx, :]
+    if weights !== nothing
+        diagnostics = calibrate_tdr_variability!(
+            gv_out, raw_gv, weights, TimestepsPerRepPeriod)
+        CSV.write(joinpath(dirname(out_gvar_path),
+            "Generators_variability_diagnostics.csv"), diagnostics)
+    end
     insertcols!(gv_out, 1, :Time_Index => 1:nrow(gv_out))
 
     if v
@@ -959,6 +1152,7 @@ function write_tdr_generators_variability_from_raw_multistage_concat(
         out_gvar_path::String,
         M,
         TimestepsPerRepPeriod::Int;
+        weights = nothing,
         v::Bool = false)
 
     system_folder = mysetup["SystemFolder"]
@@ -1009,6 +1203,12 @@ function write_tdr_generators_variability_from_raw_multistage_concat(
     end
 
     gv_out = raw_gv_concat[row_idx, :]
+    if weights !== nothing
+        diagnostics = calibrate_tdr_variability!(
+            gv_out, raw_gv_concat, weights, TimestepsPerRepPeriod)
+        CSV.write(joinpath(dirname(out_gvar_path),
+            "Generators_variability_diagnostics.csv"), diagnostics)
+    end
     insertcols!(gv_out, 1, :Time_Index => 1:nrow(gv_out))
 
     if v
@@ -1109,17 +1309,29 @@ function cluster_inputs(inpath,
     WeightTotal = myTDRsetup["WeightTotal"]
     ClusterFuelPrices = myTDRsetup["ClusterFuelPrices"]
     SeasonalClustering = get(myTDRsetup, "SeasonalClustering", 0)
+    PeriodsPerSeason = get(myTDRsetup, "PeriodsPerSeason", MinPeriods ÷ 4)
+    PreserveAnnualCapacityFactors =
+        get(myTDRsetup, "PreserveAnnualCapacityFactors", 1)
+    AggregateProfilesForClustering =
+        get(myTDRsetup, "AggregateProfilesForClustering", 1)
     TimeDomainReductionFolder = mysetup["TimeDomainReductionFolder"]
 
     SeasonalClustering in (0, 1) ||
         error("SeasonalClustering must be either 0 or 1.")
+    PreserveAnnualCapacityFactors in (0, 1) ||
+        error("PreserveAnnualCapacityFactors must be either 0 or 1.")
+    AggregateProfilesForClustering in (0, 1) ||
+        error("AggregateProfilesForClustering must be either 0 or 1.")
     if SeasonalClustering == 1
-        MinPeriods == 4 && MaxPeriods == 4 || error(
-            "SeasonalClustering=1 requires MinPeriods=4 and MaxPeriods=4.")
+        MinPeriods == MaxPeriods || error(
+            "SeasonalClustering=1 requires MinPeriods and MaxPeriods to be equal.")
+        MinPeriods % 4 == 0 || error(
+            "SeasonalClustering=1 requires a total period count divisible by four.")
+        PeriodsPerSeason == MinPeriods ÷ 4 || error(
+            "PeriodsPerSeason must equal MinPeriods/4 when SeasonalClustering=1.")
         UseExtremePeriods == 0 || error(
-            "SeasonalClustering=1 selects exactly four seasonal weeks and cannot " *
-            "be combined with UseExtremePeriods=1. Use the regular extreme-period " *
-            "mode with at least five periods when an additional extreme week is required.")
+            "SeasonalClustering=1 reserves all period slots for seasonally stratified " *
+            "clustering and cannot be combined with UseExtremePeriods=1.")
         TimestepsPerRepPeriod == 168 || error(
             "SeasonalClustering=1 currently requires TimestepsPerRepPeriod=168.")
     end
@@ -1397,14 +1609,28 @@ function cluster_inputs(inpath,
                        :value] for w in 1:NumDataPoints if w <= NumDataPoints]
     ModifiedData = DataFrame(Dict(Symbol(i) => DFsToConcat[i] for i in 1:NumDataPoints))
 
-    AnnualTSeriesNormalized[:, :Group] .= (1:Nhours) .÷ (TimestepsPerRepPeriod + 0.0001) .+
-                                          1
+    ClusteringAnnualData = if AggregateProfilesForClustering == 1
+        aggregate_profiles_for_clustering(
+            AnnualTSeriesNormalized,
+            demand_col_names,
+            var_col_names,
+            solar_col_names,
+            wind_col_names,
+            fuel_col_names,
+            col_to_zone_map,
+        )
+    else
+        select(AnnualTSeriesNormalized, Symbol.(OldColNames))
+    end
+    ClusteringFeatureNames = names(ClusteringAnnualData)
+    ClusteringAnnualData[:, :Group] .=
+        (1:Nhours) .÷ (TimestepsPerRepPeriod + 0.0001) .+ 1
     DFsToConcatNorm = [stack(
-                           AnnualTSeriesNormalized[
-                               isequal.(AnnualTSeriesNormalized.Group,
+                           ClusteringAnnualData[
+                               isequal.(ClusteringAnnualData.Group,
                                    w),
                                :],
-                           OldColNames)[!,
+                           ClusteringFeatureNames)[!,
                            :value] for w in 1:NumDataPoints if w <= NumDataPoints]
     ModifiedDataNormalized = DataFrame(Dict(Symbol(i) => DFsToConcatNorm[i]
     for i in 1:NumDataPoints))
@@ -1432,7 +1658,8 @@ function cluster_inputs(inpath,
 
     if SeasonalClustering == 1
         R, A, W, M, DistMatrix = cluster_four_seasons(
-            ClusteringInputDF, ClusterMethod, nReps, v, random)
+            ClusteringInputDF, ClusterMethod, nReps, v, random;
+            periods_per_season = PeriodsPerSeason)
     else
         # Cluster once regardless of iteration decisions
         push!(cluster_results,
@@ -1444,7 +1671,7 @@ function cluster_inputs(inpath,
     if (Iterate == 1) && (SeasonalClustering == 0)
         while (!check_condition(Threshold,
             last(cluster_results)[1],
-            OldColNames,
+            ClusteringFeatureNames,
             ScalingMethod,
             TimestepsPerRepPeriod)) & ((length(ExtremeWksList) + NClusters) < MaxPeriods)
             if IterateMethod == "cluster"
@@ -1782,6 +2009,7 @@ function cluster_inputs(inpath,
                     out_gvar_path,
                     M,
                     TimestepsPerRepPeriod;
+                    weights = PreserveAnnualCapacityFactors == 1 ? W : nothing,
                     v = v
                 )
                 for filename in ("Minimum_commitment_coal.csv", "Minimum_commitment_gas.csv")
@@ -1946,6 +2174,7 @@ function cluster_inputs(inpath,
                 out_gvar_path,
                 M,
                 TimestepsPerRepPeriod;
+                weights = PreserveAnnualCapacityFactors == 1 ? W : nothing,
                 v = v
             )
             for filename in ("Minimum_commitment_coal.csv", "Minimum_commitment_gas.csv")
@@ -2108,6 +2337,7 @@ function cluster_inputs(inpath,
             out_gvar_path,
             M,
             TimestepsPerRepPeriod;
+            weights = PreserveAnnualCapacityFactors == 1 ? W : nothing,
             v = v
         )
         for filename in ("Minimum_commitment_coal.csv", "Minimum_commitment_gas.csv")

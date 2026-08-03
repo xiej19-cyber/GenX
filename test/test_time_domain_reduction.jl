@@ -133,4 +133,49 @@ Test.@test seasonal_weights == [13, 13, 13, 13]
 Test.@test all(seasonal_assignments[p] == s
     for s in 1:4 for p in season_ranges[s])
 
+_, seasonal12_assignments, seasonal12_weights, seasonal12_reps, _ =
+    GenX.cluster_four_seasons(
+        seasonal_input, "kmeans", 2, false, false; periods_per_season = 3)
+Test.@test length(seasonal12_reps) == 12
+Test.@test sum(seasonal12_weights) == 52
+Test.@test all(count(r -> r in season_ranges[s], seasonal12_reps) == 3 for s in 1:4)
+Test.@test all(seasonal12_assignments[p] in (3 * (s - 1) + 1):(3 * s)
+    for s in 1:4 for p in season_ranges[s])
+
+normalized_profiles = DataFrames.DataFrame(
+    Demand_MW_z1 = [0.0, 1.0],
+    wind_a = [0.0, 1.0],
+    wind_b = [1.0, 0.0],
+    solar_a = [0.2, 0.8],
+)
+aggregated_profiles = GenX.aggregate_profiles_for_clustering(
+    normalized_profiles,
+    ["Demand_MW_z1"],
+    ["wind_a", "wind_b", "solar_a"],
+    ["solar_a"],
+    ["wind_a", "wind_b"],
+    String[],
+    Dict("wind_a" => 1, "wind_b" => 1, "solar_a" => 1),
+)
+Test.@test Set(names(aggregated_profiles)) ==
+           Set(["Demand_MW_z1", "TDR_Wind_z1", "TDR_Solar_z1"])
+Test.@test aggregated_profiles.TDR_Wind_z1 == [0.5, 0.5]
+
+# Selected variability profiles are bounded and reproduce full-resolution
+# annual available hours after applying representative-period weights.
+raw_variability = DataFrames.DataFrame(
+    Wind = [0.1, 0.2, 0.7, 0.8, 0.4, 0.5, 0.9, 1.0],
+    Solar = [0.0, 0.2, 0.8, 0.0, 0.1, 0.3, 0.9, 0.1],
+)
+selected_variability = raw_variability[[1, 2, 5, 6], :]
+variability_diagnostics = GenX.calibrate_tdr_variability!(
+    selected_variability, raw_variability, [4.0, 4.0], 2)
+variability_omega = repeat([2.0, 2.0]; inner = 2)
+for column in names(raw_variability)
+    Test.@test sum(selected_variability[!, column] .* variability_omega) ≈
+               sum(raw_variability[!, column]) atol = 1e-8
+    Test.@test all(x -> 0 <= x <= 1, selected_variability[!, column])
+end
+Test.@test nrow(variability_diagnostics) == 2
+
 end # module TestTDR

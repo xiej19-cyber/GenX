@@ -80,6 +80,11 @@ WeightTotal: 8760
   #   number of timesteps in the raw input data.
 ClusterFuelPrices: 1
 
+# Preserve the legacy golden clustering/output fixture. New aggregation and
+# annual-GV calibration behavior is covered by focused tests below.
+AggregateProfilesForClustering: 0
+PreserveAnnualCapacityFactors: 0
+
   #   - UseExtremePeriods
   #   Either 'yes' or 'no', this designates whether or not to include
   #   outliers (by performance or demand/resource extreme) as their own representative periods.
