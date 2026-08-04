@@ -8,7 +8,7 @@ IterateMethod: "cluster"
 Threshold: 0.05
 nReps: 100
 DemandWeight: 1
-WeightTotal: 8760
+WeightTotal: 120
 ClusterFuelPrices: 1
 UseExtremePeriods: 1
 MultiStageConcatenate: 0

@@ -4,6 +4,13 @@ import GenX
 import Test
 import JLD2, Clustering, DataFrames, CSV
 
+precompile_case = joinpath(dirname(@__DIR__), "precompile", "case")
+precompile_tdr_settings = GenX.YAML.load_file(joinpath(
+    precompile_case, "settings", "time_domain_reduction_settings.yml"))
+precompile_demand = CSV.read(joinpath(
+    precompile_case, "system", "Demand_data.csv"), DataFrames.DataFrame)
+Test.@test precompile_tdr_settings["WeightTotal"] == DataFrames.nrow(precompile_demand)
+
 include(joinpath(@__DIR__, "utilities.jl"))
 
 # suppress printing
