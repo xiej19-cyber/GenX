@@ -1,11 +1,15 @@
 
 """
-    configure_copt(solver_settings_path::String, optimizer::Type=COPT.Optimizer)
+    configure_copt(solver_settings_path::String, optimizer::Any)
 
 配置 COPT 求解器参数。
 支持常用别名替换，并过滤 GenX 尚未开放的参数。
+
+`optimizer` must be supplied by the caller (normally `COPT.Optimizer`). Keeping
+the optimizer package outside GenX's direct dependencies allows users of other
+solvers to load and precompile GenX without installing COPT.
 """
-function configure_copt(solver_settings_path::String, optimizer::Type=COPT.Optimizer)
+function configure_copt(solver_settings_path::String, optimizer::Any)
 
     solver_settings = YAML.load_file(solver_settings_path) |> x -> convert(Dict{String, Any}, x)
     solver_settings = rename_keys(solver_settings,
