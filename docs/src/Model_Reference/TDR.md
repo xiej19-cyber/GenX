@@ -12,6 +12,7 @@ GenX.run_timedomainreduction!
 
 ```@docs
 GenX.full_time_series_reconstruction
+GenX.manual_four_week_full_time_series
 ```
 
 ## Four-season representative weeks
