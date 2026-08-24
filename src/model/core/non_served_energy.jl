@@ -114,6 +114,21 @@ function non_served_energy!(EP::Model, inputs::Dict, setup::Dict)
         end
     end
 
+    if setup["CRM_multihours"] > 0 && SEG >= 2
+        NCRM = inputs["NCapacityReserveMargin"]
+        selected_hours = inputs["selected_capres_multihours"]
+        @expression(EP,
+            eCapResMarBalanceMultihourNSE[
+                res = 1:NCRM, t in selected_hours[res]],
+            sum(EP[:vNSE][s, t, z]
+                for s in 2:SEG,
+                    z in findall(!iszero, inputs["dfCapRes"][:, res])))
+        for res in 1:NCRM, t in selected_hours[res]
+            add_to_expression!(EP[:eCapResMarBalanceMultihour][res, t],
+                eCapResMarBalanceMultihourNSE[res, t])
+        end
+    end
+
 
 
     ### Constratints ###

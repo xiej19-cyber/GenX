@@ -6,10 +6,10 @@ function write_reserve_margin_slack_multihours(path::AbstractString, inputs::Dic
     df = DataFrame(Constraint = String[], Hour = Int[], Slack = Float64[], Penalty = Float64[])
 
     for res in 1:NCRM
-        penalty_val = value(EP[:eCCapResSlack][res])
-
         for t in selected_hours[res]
             slack_val = value(EP[:vCapResSlack][res,t])
+            penalty_val = inputs["dfCapRes_slack"][res, :PriceCap] *
+                          slack_val * inputs["omega"][t]
 
             push!(df, (
                 Constraint = "CapResMulti_$res",

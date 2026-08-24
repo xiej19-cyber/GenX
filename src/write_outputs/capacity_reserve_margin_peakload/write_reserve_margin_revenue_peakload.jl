@@ -81,7 +81,9 @@ function write_reserve_margin_revenue_peakload(
 
         # -------- VRE-STORAGE ----------
         if !isempty(VRE_STOR)
-            rev[VRE_STOR] = [crm_derate(y) * eTotalCap[y] * price for y in VRE_STOR]
+            rev[VRE_STOR] = [
+                vre_stor_effective_capacity_peakload(EP, y, i) * price
+                for y in VRE_STOR]
         end
 
         # accumulate

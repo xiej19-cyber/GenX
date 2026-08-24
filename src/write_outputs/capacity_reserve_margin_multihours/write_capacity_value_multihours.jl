@@ -9,7 +9,9 @@ function write_capacity_value_multihours(path::AbstractString, inputs::Dict, set
     VRE = inputs["VRE"]
     HYDRO_RES = inputs["HYDRO_RES"]
     STOR_ALL = inputs["STOR_ALL"]
+    FLEX = inputs["FLEX"]
     MUST_RUN = inputs["MUST_RUN"]
+    VRE_STOR = inputs["VRE_STOR"]
 
     scale_factor = setup["ParameterScale"] == 1 ? ModelScalingFactor : 1
     eTotalCap = value.(EP[:eTotalCap])
@@ -38,8 +40,17 @@ function write_capacity_value_multihours(path::AbstractString, inputs::Dict, set
                 for y in MUST_RUN
                     capvalue[y, col_idx] = derating_factor(gen[y], tag=res) * eTotalCap[y]
                 end
+                for y in FLEX
+                    capvalue[y, col_idx] = derating_factor(gen[y], tag=res) * eTotalCap[y]
+                end
+                for y in VRE_STOR
+                    capvalue[y, col_idx] =
+                        vre_stor_effective_capacity_multihours(EP, y, res, t)
+                end
             end
         end
+
+        capvalue .*= scale_factor
 
         temp_df = DataFrame(capvalue, :auto)
         rename!(temp_df, [Symbol("t$t") for t in all_times])

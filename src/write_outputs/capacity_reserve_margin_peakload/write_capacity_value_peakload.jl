@@ -78,8 +78,11 @@ function write_capacity_value_peakload(path::AbstractString, inputs::Dict, setup
 
         # --- VRE-STOR ---
         if !isempty(VRE_STOR_EX)
-            capvalue[VRE_STOR_EX] = [crm_derate(y) for y in VRE_STOR_EX] .* eTotalCap[VRE_STOR_EX]
+            capvalue[VRE_STOR_EX] = [
+                vre_stor_effective_capacity_peakload(EP, y, i) for y in VRE_STOR_EX]
         end
+
+        capvalue .*= scale_factor
 
         temp_dfCapValue = DataFrame(
             Resource = inputs["RESOURCE_NAMES"],

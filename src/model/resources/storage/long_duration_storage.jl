@@ -187,37 +187,6 @@ function long_duration_storage!(EP::Model, inputs::Dict, setup::Dict)
             r]==vS[y, hours_per_subperiod * dfPeriodMap[r, :Rep_Period_Index]] -
                 vdSOC[y, dfPeriodMap[r, :Rep_Period_Index]])
 
-    # Capacity Reserves Margin peakload policy
-    if setup["CRM_peakload"] > 0
-        NCRM     = inputs["NCapacityReserveMargin"]
-        @expression(EP,
-            eCapResMarBalancePeakLDS[res = 1:NCRM],
-            sum(derating_factor(gen[y], tag = res) * EP[:eTotalCap][y] for y in STOR_LONG_DURATION))
-        for  res in 1:NCRM
-                add_to_expression!(EP[:eCapResMarBalancePeak][res], eCapResMarBalancePeakLDS[res])
-        end
-    end
-
-    # Capacity Reserves Margin multihours policy
-    if setup["CRM_multihours"] > 0
-        NCRM_multi = inputs["NCapacityReserveMargin"]
-        selected_hours = inputs["selected_capres_multihours"]
-
-        @expression(EP,
-            eCapResMarBalanceMultiLDS[res = 1:NCRM_multi, t in union(selected_hours[res]...)],
-            sum(derating_factor(gen[y], tag = res) * EP[:eTotalCap][y] for y in STOR_LONG_DURATION)
-        )
-
-        for res in 1:NCRM_multi
-            for t in selected_hours[res]
-                add_to_expression!(
-                    EP[:eCapResMarBalanceMultihour][res, t],
-                    eCapResMarBalanceMultiLDS[res, t]
-                )
-            end
-        end
-    end
-
     # Capacity Reserve Margin policy
     if CapacityReserveMargin > 0
         vCAPRES_charge = EP[:vCAPRES_charge]
@@ -289,4 +258,3 @@ function long_duration_storage!(EP::Model, inputs::Dict, setup::Dict)
                 +vdSOC_maxNeg[y,dfPeriodMap[r,:Rep_Period_Index]] >= 0)
     end
 end
-

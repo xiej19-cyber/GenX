@@ -40,3 +40,8 @@ function _thermal_effective_capacity_peakload(
 
     return effective_capacity
 end
+
+function vre_stor_effective_capacity_peakload(
+        EP::Model, y::Int, capres_zone::Int)::Float64
+    return value(EP[:eCapResMarBalancePeakVreStorByResource][y, capres_zone])
+end

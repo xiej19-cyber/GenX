@@ -2477,55 +2477,82 @@ function vre_stor_capres!(EP::Model, inputs::Dict, setup::Dict)
     end
     add_similar_to_expression!(EP[:eCapResMarBalance], EP[:eCapResMarBalanceStor_VRE_STOR])
 
-      # Constraint 4: capacity reserve margin peakload constraint
+    # Constraint 4: capacity reserve margin peakload constraint. Store the
+    # per-resource accredited capacity so the revenue output uses exactly the
+    # same quantity as the policy constraint.
     if setup["CRM_peakload"] > 0
-        NCRM     = inputs["NCapacityReserveMargin"]
+        NCRM = inputs["NCapacityReserveMargin"]
+        VRE_STOR = inputs["VRE_STOR"]
+        VS_SYM_DC = inputs["VS_SYM_DC"]
+        VS_SYM_AC = inputs["VS_SYM_AC"]
+        VS_ASYM_DC_DISCHARGE = inputs["VS_ASYM_DC_DISCHARGE"]
+        VS_ASYM_AC_DISCHARGE = inputs["VS_ASYM_AC_DISCHARGE"]
+
+        @expression(EP,
+            eCapResMarBalancePeakVreStorByResource[y in VRE_STOR, res = 1:NCRM],
+            if iszero(inputs["dfCapRes"][gen_zone[y], res])
+                0.0
+            else
+                derating_factor(gen[y], tag = res) * (
+                    (y in inputs["VS_SOLAR"] ?
+                     by_rid(y, :etainverter) * EP[:eTotalCap_SOLAR][y] : 0.0) +
+                    (y in inputs["VS_WIND"] ? EP[:eTotalCap_WIND][y] : 0.0) +
+                    (y in VS_SYM_DC ?
+                     by_rid(y, :etainverter) * by_rid(y, :power_to_energy_dc) *
+                     EP[:eTotalCap_STOR][y] : 0.0) +
+                    (y in VS_SYM_AC ?
+                     by_rid(y, :power_to_energy_ac) * EP[:eTotalCap_STOR][y] : 0.0) +
+                    (y in VS_ASYM_DC_DISCHARGE ?
+                     by_rid(y, :etainverter) * EP[:eTotalCapDischarge_DC][y] : 0.0) +
+                    (y in VS_ASYM_AC_DISCHARGE ?
+                     EP[:eTotalCapDischarge_AC][y] : 0.0))
+            end)
         @expression(EP,
             eCapResMarBalancePeakStor_VRE_STOR[res = 1:NCRM],
-            sum(derating_factor(gen[y], tag = res) * EP[:eTotalCap][y] for y in HYDRO_RES))
-    for res in 1:NCRM
-            # 1) solar
-            eCapResMarBalancePeakStor_VRE_STOR = sum(derating_factor(gen[y], tag = res) * by_rid(y, :etainverter) *
-                     EP[:eTotalCap_SOLAR][y]
-                    for y in inputs["VS_SOLAR"]
-                    if !iszero(inputs["dfCapRes"][gen_zone[y], res]))
+            sum(eCapResMarBalancePeakVreStorByResource[y, res] for y in VRE_STOR))
+        for res in 1:NCRM
+            add_to_expression!(EP[:eCapResMarBalancePeak][res],
+                eCapResMarBalancePeakStor_VRE_STOR[res])
+        end
+    end
 
-            # 2) wind
-            eCapResMarBalancePeakStor_VRE_STOR += sum(derating_factor(gen[y], tag = res) *
-                         EP[:eTotalCap_WIND][y]
-                        for y in inputs["VS_WIND"]
-                        if !iszero(inputs["dfCapRes"][gen_zone[y], res]))
+    if setup["CRM_multihours"] > 0
+        NCRM = inputs["NCapacityReserveMargin"]
+        selected_hours = inputs["selected_capres_multihours"]
+        VRE_STOR = inputs["VRE_STOR"]
+        VS_SYM_DC = inputs["VS_SYM_DC"]
+        VS_SYM_AC = inputs["VS_SYM_AC"]
+        VS_ASYM_DC_DISCHARGE = inputs["VS_ASYM_DC_DISCHARGE"]
+        VS_ASYM_AC_DISCHARGE = inputs["VS_ASYM_AC_DISCHARGE"]
 
-            # 3) DC charge discharge
-            eCapResMarBalancePeakStor_VRE_STOR += sum( derating_factor(gen[y], tag=res) * by_rid(y, :etainverter) *
-                     EP[:eTotalCap_STORAGE][y]   
-                     for y in STOR_ALL_DC        
-                     if !iszero(inputs["dfCapRes"][gen_zone[y], res]))
-
-
-            # 4) AC
-            eCapResMarBalancePeakStor_VRE_STOR += sum( derating_factor(gen[y], tag=res) *
-                     EP[:eTotalCap_STORAGE][y]
-                     for y in STOR_ALL_AC
-                     if !iszero(inputs["dfCapRes"][gen_zone[y], res]))
-
-
-            # 5) StorageVirtualDischarge
-            if StorageVirtualDischarge > 0
-            eCapResMarBalancePeakStor_VRE_STOR += sum( derating_factor(gen[y], tag=res) * by_rid(y, :etainverter) *
-             EP[:vCAPRES_DC_DISCHARGE][y]
-              for y in DC_DISCHARGE
-                 if !iszero(inputs["dfCapRes"][gen_zone[y], res]) 
-                )
-            eCapResMarBalancePeakStor_VRE_STOR += sum( derating_factor(gen[y], tag=res) * 
-                EP[:vCAPRES_AC_DISCHARGE][y]
-                for y in AC_DISCHARGE
-                    if !iszero(inputs["dfCapRes"][gen_zone[y], res])
-                ) 
-            end
-
-            # 6) 
-            add_to_expression!(EP[:eCapResMarBalancePeak][res], eCapResMarBalancePeakStor_VRE_STOR[res])
+        @expression(EP,
+            eCapResMarBalanceMultihourVreStorByResource[
+                y in VRE_STOR, res = 1:NCRM, t in selected_hours[res]],
+            if iszero(inputs["dfCapRes"][gen_zone[y], res])
+                0.0
+            else
+                derating_factor(gen[y], tag = res) * (
+                    (y in inputs["VS_SOLAR"] ?
+                     by_rid(y, :etainverter) * EP[:eTotalCap_SOLAR][y] : 0.0) +
+                    (y in inputs["VS_WIND"] ? EP[:eTotalCap_WIND][y] : 0.0) +
+                    (y in VS_SYM_DC ?
+                     by_rid(y, :etainverter) * by_rid(y, :power_to_energy_dc) *
+                     EP[:eTotalCap_STOR][y] : 0.0) +
+                    (y in VS_SYM_AC ?
+                     by_rid(y, :power_to_energy_ac) * EP[:eTotalCap_STOR][y] : 0.0) +
+                    (y in VS_ASYM_DC_DISCHARGE ?
+                     by_rid(y, :etainverter) * EP[:eTotalCapDischarge_DC][y] : 0.0) +
+                    (y in VS_ASYM_AC_DISCHARGE ?
+                     EP[:eTotalCapDischarge_AC][y] : 0.0))
+            end)
+        @expression(EP,
+            eCapResMarBalanceMultihourStor_VRE_STOR[
+                res = 1:NCRM, t in selected_hours[res]],
+            sum(eCapResMarBalanceMultihourVreStorByResource[y, res, t]
+                for y in VRE_STOR))
+        for res in 1:NCRM, t in selected_hours[res]
+            add_to_expression!(EP[:eCapResMarBalanceMultihour][res, t],
+                eCapResMarBalanceMultihourStor_VRE_STOR[res, t])
         end
     end
 

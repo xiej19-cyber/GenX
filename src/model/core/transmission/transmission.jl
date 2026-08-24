@@ -186,6 +186,21 @@ function transmission!(EP::Model, inputs::Dict, setup::Dict)
         end
     end
 
+    if setup["CRM_multihours"] > 0 && Z > 1
+        NCRM = inputs["NCapacityReserveMargin"]
+        selected_hours = inputs["selected_capres_multihours"]
+        @expression(EP,
+            eCapResMarBalanceMultihourTrans[
+                res = 1:NCRM, t in selected_hours[res]],
+            sum(inputs["dfTransCapResMulti_excl"][l, res] *
+                inputs["dfDerateTransCapResMulti"][l, res] * EP[:vFLOW][l, t]
+                for l in 1:L))
+        for res in 1:NCRM, t in selected_hours[res]
+            add_to_expression!(EP[:eCapResMarBalanceMultihour][res, t],
+                -1.0, eCapResMarBalanceMultihourTrans[res, t])
+        end
+    end
+
 
     ### Constraints ###
 

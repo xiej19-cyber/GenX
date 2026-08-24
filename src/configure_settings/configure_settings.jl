@@ -90,6 +90,13 @@ function validate_settings!(settings::Dict{Any, Any})
     settings["WriteOutputs"] = lowercase(settings["WriteOutputs"])
     @assert settings["WriteOutputs"] ∈ ["annual", "full"]
     @assert settings["OperationalReserves"] ∈ [0, 1, 2] "OperationalReserves must be 0, 1, or 2"
+    @assert settings["CapacityPayment"] ∈ [0, 1] "CapacityPayment must be 0 or 1"
+    @assert settings["CRM_peakload"] ∈ [0, 1] "CRM_peakload must be 0 or 1"
+    @assert settings["CRM_multihours"] ∈ [0, 1] "CRM_multihours must be 0 or 1"
+    active_crm_modes = count(>(0), [settings["CapacityReserveMargin"],
+        settings["CRM_peakload"], settings["CRM_multihours"]])
+    active_crm_modes <= 1 ||
+        error("CapacityReserveMargin, CRM_peakload, and CRM_multihours are mutually exclusive.")
     settings["LinePowerFlowLimits"] ∈ [0, 1] ||
         error("LinePowerFlowLimits must be 0 or 1.")
     if settings["LinePowerFlowLimits"] == 1 && settings["MultiStage"] == 1

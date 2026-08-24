@@ -9,6 +9,10 @@ function load_cap_reserve_margin_peakload!(setup::Dict, path::AbstractString, in
     filename = "CRM_peakload_slack.csv"
     if isfile(joinpath(path, filename))
         df = load_dataframe(joinpath(path, filename))
+        :PriceCap in propertynames(df) ||
+            error("$(filename) must contain a PriceCap column.")
+        all(x -> x isa Real && isfinite(x) && x >= 0, df.PriceCap) ||
+            error("PriceCap values in $(filename) must be finite, nonnegative numbers.")
         inputs["dfCapRes_slack"] = df
         inputs["dfCapRes_slack"][!, :PriceCap] ./= scale_factor # Million $/GW if scaled, $/MW if not scaled
     end
@@ -17,10 +21,16 @@ function load_cap_reserve_margin_peakload!(setup::Dict, path::AbstractString, in
     df = load_dataframe(joinpath(path, filename))
 
     mat = extract_matrix_from_dataframe(df, "CapRes")
+    size(mat, 2) > 0 || error("$(filename) must contain at least one CapRes column.")
+    all(x -> x isa Real && isfinite(x) && x >= 0, mat) ||
+        error("CapRes values in $(filename) must be finite, nonnegative numbers.")
     inputs["dfCapRes"] = mat
     
     NCRM = size(mat,2)
     inputs["NCapacityReserveMargin"] = NCRM
+    if haskey(inputs, "dfCapRes_slack") && nrow(inputs["dfCapRes_slack"]) != NCRM
+        error("CRM_peakload_slack.csv must have one row per CRM constraint ($(NCRM) rows).")
+    end
 
     T = inputs["T"]
     pD=inputs["pD"]
@@ -28,6 +38,7 @@ function load_cap_reserve_margin_peakload!(setup::Dict, path::AbstractString, in
     peak_hour_idx = Vector{Int}(undef, NCRM)
     for res in 1:NCRM
         zones = findall(!iszero, inputs["dfCapRes"][:, res])
+        isempty(zones) && error("CapRes_$(res) does not include any zone with a positive reserve margin.")
         total_load = [sum(pD[t, z] for z in zones) for t in 1:T]
         peak_hour_idx[res] = argmax(total_load)
     end

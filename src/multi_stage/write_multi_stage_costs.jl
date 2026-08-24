@@ -42,7 +42,12 @@ function write_multi_stage_costs(outpath::String, settings_d::Dict, inputs_dict:
     end
 
     # For OPEX costs, apply additional discounting
-    for cost in ["cVar", "cNSE", "cStart", "cUnmetRsv", "cUnmetPolicyPenalty"]
+    for cost in ["cVar",
+        "cNSE",
+        "cStart",
+        "cUnmetRsv",
+        "cUnmetPolicyPenalty",
+        "cCapacityPayment"]
         if cost in df_costs[!, :Costs]
             df_costs[df_costs[!, :Costs] .== cost, 2:end] = transpose(OPEXMULTS) .*
                                                             df_costs[df_costs[!, :Costs] .== cost, 2:end]

@@ -20,6 +20,19 @@ end
     include("test_line_power_flow_limits.jl")
 end
 
+@testset "Capacity payment" begin
+    include("test_capacity_payment.jl")
+end
+
+@testset "Peak-load capacity reserve margin" begin
+    include("test_peakload_capacity_reserve_margin.jl")
+end
+
+@testset "Multihour capacity reserve margin" begin
+include("test_multihour_capacity_reserve_margin.jl")
+include("test_policy_parameter_scaling.jl")
+end
+
 if VERSION ≥ v"1.7"
     @testset "Resource loading" begin
         include("test_load_resource_data.jl")

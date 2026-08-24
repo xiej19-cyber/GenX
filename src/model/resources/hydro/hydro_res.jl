@@ -144,7 +144,7 @@ function hydro_res!(EP::Model, inputs::Dict, setup::Dict)
         selected_hours = inputs["selected_capres_multihours"]
 
         @expression(EP,
-            eCapResMarBalanceMultiHydro[res = 1:NCRM_multi, t in union(selected_hours[res]...)],
+            eCapResMarBalanceMultiHydro[res = 1:NCRM_multi, t in selected_hours[res]],
             sum(derating_factor(gen[y], tag = res) * EP[:eTotalCap][y]
                 for y in inputs["HYDRO_RES"]
             )

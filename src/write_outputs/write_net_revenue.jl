@@ -290,15 +290,17 @@ function write_net_revenue(path::AbstractString,
     end
 
     # Add capacity payment revenue to the dataframe
-    scale_factor = setup["ParameterScale"] == 1 ? ModelScalingFactor : 1
+    monetary_scale_factor = setup["ParameterScale"] == 1 ? ModelScalingFactor^2 : 1
     dfNetRevenue.CapacityPaymentRevenue = zeros(nrow(dfNetRevenue))
     if setup["CapacityPayment"] == 1 && has_duals(EP)
-        dfNetRevenue.CapacityPaymentRevenue = value.(EP[:eCapPayment][1:G]).* scale_factor
+        dfNetRevenue.CapacityPaymentRevenue = value.(EP[:eCapPayment][1:G]) .* monetary_scale_factor
     end
 
     dfNetRevenue.Revenue = dfNetRevenue.EnergyRevenue
     .+dfNetRevenue.SubsidyRevenue
     .+dfNetRevenue.ReserveMarginRevenue
+    .+dfNetRevenue.ReserveMarginRevenue_peakload
+    .+dfNetRevenue.ReserveMarginRevenue_multihours
     .+dfNetRevenue.ESRRevenue
     .+dfNetRevenue.RegSubsidyRevenue
     .+dfNetRevenue.OperatingReserveRevenue

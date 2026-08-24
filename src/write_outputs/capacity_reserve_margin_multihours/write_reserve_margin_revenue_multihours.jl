@@ -4,6 +4,10 @@ function write_reserve_margin_revenue_multihours(path::AbstractString, inputs::D
     selected_hours = inputs["selected_capres_multihours"]
     NCRM = inputs["NCapacityReserveMargin"]
     scale_factor = setup["ParameterScale"] == 1 ? ModelScalingFactor : 1
+    THERM_ALL = inputs["THERM_ALL"]
+    STATIC_CAPACITY_RESOURCES = union(inputs["VRE"],
+        inputs["HYDRO_RES"], inputs["STOR_ALL"], inputs["MUST_RUN"], inputs["FLEX"])
+    VRE_STOR = inputs["VRE_STOR"]
 
     eTotalCap = value.(EP[:eTotalCap])
     df = DataFrame(
@@ -20,19 +24,18 @@ function write_reserve_margin_revenue_multihours(path::AbstractString, inputs::D
         revenue = zeros(G)
 
         for t in ts_list
-            price = 0.0
-            if haskey(EP, :cCapacityResMarginMultihour) && haskey(EP[:cCapacityResMarginMultihour], (res, t))
-                price = dual(EP[:cCapacityResMarginMultihour][res, t]) * scale_factor
-            end
+            price = capacity_reserve_margin_price_multihours(EP, setup, res, t)
             for y in 1:G
-                if y in inputs["THERM_ALL"]
+                if y in THERM_ALL
                     cap = thermal_plant_effective_capacity_multihours(EP, inputs, y, res, t)
-                elseif y in union(inputs["VRE"], inputs["HYDRO_RES"], inputs["STOR_ALL"], inputs["MUST_RUN"])
+                elseif y in STATIC_CAPACITY_RESOURCES
                     cap = derating_factor(gen[y], tag=res) * eTotalCap[y]
+                elseif y in VRE_STOR
+                    cap = vre_stor_effective_capacity_multihours(EP, y, res, t)
                 else
                     cap = 0.0
                 end
-                revenue[y] += cap * price
+                revenue[y] += cap * price * scale_factor
             end
         end
 

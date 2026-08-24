@@ -84,6 +84,30 @@ function flexible_demand!(EP::Model, inputs::Dict, setup::Dict)
         add_similar_to_expression!(EP[:eCapResMarBalance], eCapResMarBalanceFlex)
     end
 
+    if setup["CRM_peakload"] > 0
+        nCRMZones = inputs["NCapacityReserveMargin"]
+        @expression(EP,
+            eCapResMarBalancePeakFlex[res = 1:nCRMZones],
+            sum(derating_factor(gen[y], tag = res) * EP[:eTotalCap][y] for y in FLEX))
+        for res in 1:nCRMZones
+            add_to_expression!(
+                EP[:eCapResMarBalancePeak][res], eCapResMarBalancePeakFlex[res])
+        end
+    end
+
+    if setup["CRM_multihours"] > 0
+        nCRMZones = inputs["NCapacityReserveMargin"]
+        selected_hours = inputs["selected_capres_multihours"]
+        @expression(EP,
+            eCapResMarBalanceMultihourFlex[
+                res = 1:nCRMZones, t in selected_hours[res]],
+            sum(derating_factor(gen[y], tag = res) * EP[:eTotalCap][y] for y in FLEX))
+        for res in 1:nCRMZones, t in selected_hours[res]
+            add_to_expression!(EP[:eCapResMarBalanceMultihour][res, t],
+                eCapResMarBalanceMultihourFlex[res, t])
+        end
+    end
+
     ## Objective Function Expressions ##
 
     # Variable costs of "charging" for technologies "y" during hour "t" in zone "z"

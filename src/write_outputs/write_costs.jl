@@ -38,6 +38,7 @@ function write_costs(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
             push!(cost_list, "cTransVOM") # add one more row
         end
     end
+    setup["CapacityPayment"] == 1 && push!(cost_list, "cCapacityPayment")
     dfCost = DataFrame(Costs = cost_list)
 
     cVar = value(EP[:eTotalCVarOut]) +
@@ -104,6 +105,7 @@ function write_costs(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
             push!(total_cost, value(EP[:eTotalCTransVOM])) # add one more row
         end
     end
+    setup["CapacityPayment"] == 1 && push!(total_cost, -value(EP[:eTotalCapPayment]))
 
     dfCost[!, Symbol("Total")] = total_cost
 
@@ -177,6 +179,7 @@ function write_costs(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
         tempCNSE = 0.0
         tempHydrogenValue = 0.0
         tempCCO2 = 0.0
+        tempCapacityPayment = 0.0
 
         Y_ZONE = resources_in_zone_by_rid(gen, z)
         STOR_ALL_ZONE = intersect(inputs["STOR_ALL"], Y_ZONE)
@@ -332,6 +335,11 @@ function write_costs(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
             tempCTotal += tempCCO2
         end
 
+        if setup["CapacityPayment"] == 1
+            tempCapacityPayment = -sum(value.(EP[:eCapPayment][Y_ZONE]), init = 0.0)
+            tempCTotal += tempCapacityPayment
+        end
+
         if setup["ParameterScale"] == 1
             tempCTotal *= ModelScalingFactor^2
             tempCFix *= ModelScalingFactor^2
@@ -341,6 +349,7 @@ function write_costs(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
             tempCStart *= ModelScalingFactor^2
             tempHydrogenValue *= ModelScalingFactor^2
             tempCCO2 *= ModelScalingFactor^2
+            tempCapacityPayment *= ModelScalingFactor^2
         end
         temp_cost_list = [
             tempCTotal,
@@ -365,7 +374,8 @@ function write_costs(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
             if setup["LineHurdleRate"] == 1
                 push!(temp_cost_list, "-") # add one more row
             end
-        end        
+        end
+        setup["CapacityPayment"] == 1 && push!(temp_cost_list, tempCapacityPayment)
 
         dfCost[!, Symbol("Zone$z")] = temp_cost_list
     end

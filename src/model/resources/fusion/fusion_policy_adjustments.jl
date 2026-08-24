@@ -41,6 +41,27 @@ function fusion_capacity_reserve_margin_peakload_adjustment!(EP::Model,
     return
 end
 
+"""Subtract fusion parasitic power from selected-hour capacity reserve margins."""
+function fusion_capacity_reserve_margin_multihours_adjustment!(EP::Model,
+        inputs::Dict)
+    gen = inputs["RESOURCES"]
+    applicable_resources = intersect(ids_with(gen, fusion), inputs["THERM_COMMIT"])
+    selected_hours = inputs["selected_capres_multihours"]
+
+    for y in applicable_resources
+        resource_component = resource_name(gen[y])
+        for capres_zone in 1:inputs["NCapacityReserveMargin"]
+            for t in selected_hours[capres_zone]
+                adjustment = fusion_capacity_reserve_margin_adjustment(
+                    EP, inputs, resource_component, y, capres_zone, t)
+                add_to_expression!(
+                    EP[:eCapResMarBalanceMultihour][capres_zone, t], adjustment)
+            end
+        end
+    end
+    return
+end
+
 # inner-loop function: loops over Capacity Reserve Margin zones, for one resource
 # and actually adjusts the eCapResMarBalance expression
 function _fusion_capacity_reserve_margin_adjustment!(EP::Model,
