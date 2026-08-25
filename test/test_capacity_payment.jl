@@ -3,8 +3,7 @@ using DataFrames
 using HiGHS
 using JuMP
 
-function capacity_payment_resource(; name = "Test resource", price = 50.0,
-        include_price = true, max_cap = 10.0)
+function capacity_payment_resource(; name = "Test resource", max_cap = 10.0)
     attributes = Dict{Symbol, Any}(
         :resource => name,
         :zone => 1,
@@ -15,34 +14,35 @@ function capacity_payment_resource(; name = "Test resource", price = 50.0,
         :fixed_amt_cost_per_mwyr => 0.0,
         :fixed_subsidy_per_mwyr => 0.0,
     )
-    include_price && (attributes[:capacity_sub_price] = price)
     return GenX.Thermal(attributes)
 end
 
 @testset "input validation and scaling" begin
-    setup = GenX.default_settings()
-    setup["CapacityPayment"] = 1
-    inputs = Dict("RESOURCES" => [capacity_payment_resource()], "G" => 1)
+    mktempdir() do case_path
+        policies = joinpath(case_path, "policies")
+        assignments = joinpath(case_path, "resources", "policy_assignments")
+        mkpath(policies)
+        mkpath(assignments)
+        CSV.write(joinpath(policies, "Capacity_payment.csv"), DataFrame(
+            CapPayment_Region=["CapPayment_1"], CapacityPrice=[50.0]))
+        CSV.write(joinpath(assignments, "Resource_capacity_payment.csv"), DataFrame(
+            Resource=["Test resource"], Derating_Factor_1=[0.8]))
 
-    GenX.load_capacity_payment!(setup, "resources", inputs)
-    @test inputs["cap_sub_price"] == [50.0]
+        setup = GenX.default_settings()
+        setup["CapacityPayment"] = 1
+        inputs = Dict("RESOURCES" => [capacity_payment_resource()], "G" => 1)
+        GenX.load_capacity_payment!(setup, case_path, inputs)
+        @test inputs["capacity_payment_price"] == [50.0]
+        @test inputs["CAPACITY_PAYMENT_DERATING_FACTOR"] == reshape([0.8], 1, 1)
 
-    setup["ParameterScale"] = 1
-    GenX.load_capacity_payment!(setup, "resources", inputs)
-    @test inputs["cap_sub_price"] == [0.05]
+        setup["ParameterScale"] = 1
+        GenX.load_capacity_payment!(setup, case_path, inputs)
+        @test inputs["capacity_payment_price"] == [0.05]
 
-    missing_column_inputs = Dict(
-        "RESOURCES" => [capacity_payment_resource(include_price = false)],
-        "G" => 1,
-    )
-    @test_throws ErrorException GenX.load_capacity_payment!(
-        setup, "resources", missing_column_inputs)
-
-    invalid_inputs = Dict(
-        "RESOURCES" => [capacity_payment_resource(price = NaN)],
-        "G" => 1,
-    )
-    @test_throws ErrorException GenX.load_capacity_payment!(setup, "resources", invalid_inputs)
+        CSV.write(joinpath(policies, "Capacity_payment.csv"), DataFrame(
+            CapPayment_Region=["CapPayment_1"], CapacityPrice=[NaN]))
+        @test_throws ErrorException GenX.load_capacity_payment!(setup, case_path, inputs)
+    end
 end
 
 @testset "objective and monetary output scaling" begin
@@ -63,23 +63,28 @@ end
         "NEW_CAP" => [1],
         "RESOURCES" => [resource],
         "R_ZONES" => [1],
-        "cap_sub_price" => [0.05],
+        "NCapacityPaymentRegions" => 1,
+        "capacity_payment_price" => [0.05],
+        "CAPACITY_PAYMENT_DERATING_FACTOR" => reshape([0.8], 1, 1),
     )
     GenX.capacity_payment!(model, inputs, setup)
     @constraint(model, capacity == 2.0)
     @objective(model, Min, model[:eObj])
     optimize!(model)
 
-    @test objective_value(model) ≈ -0.1
-    @test value(model[:eTotalCapPayment]) ≈ 0.1
+    @test objective_value(model) ≈ -0.08
+    @test value(model[:eTotalCapPayment]) ≈ 0.08
 
     mktempdir() do output_path
         GenX.write_capacity_payment(model, inputs, output_path, setup)
         per_resource = CSV.read(
             joinpath(output_path, "capacity_payment_per_unit.csv"), DataFrame)
         total = CSV.read(joinpath(output_path, "capacity_payment_total.csv"), DataFrame)
-        @test per_resource.CapacityPaymentTotal == [100_000.0]
-        @test total.TotalCapacityPayment == [100_000.0]
+        @test per_resource.NameplateCapacityMW == [2_000.0]
+        @test per_resource.AccreditedCapacityMW == [1_600.0]
+        @test per_resource.CapPayment_1 ≈ [80_000.0]
+        @test per_resource.CapacityPaymentTotal ≈ [80_000.0]
+        @test total.TotalCapacityPayment ≈ [80_000.0]
         @test sum(per_resource.CapacityPaymentTotal) == only(total.TotalCapacityPayment)
     end
 end
@@ -95,8 +100,10 @@ end
     inputs = Dict(
         "G" => 1,
         "NEW_CAP" => [1],
-        "RESOURCES" => [capacity_payment_resource(price = 150.0, max_cap = -1.0)],
-        "cap_sub_price" => [150.0],
+        "RESOURCES" => [capacity_payment_resource(max_cap = -1.0)],
+        "NCapacityPaymentRegions" => 1,
+        "capacity_payment_price" => [150.0],
+        "CAPACITY_PAYMENT_DERATING_FACTOR" => reshape([1.0], 1, 1),
     )
 
     @test_logs (:warn, r"model may be unbounded") GenX.capacity_payment!(model, inputs, setup)

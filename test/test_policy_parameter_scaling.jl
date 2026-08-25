@@ -3,14 +3,13 @@ using DataFrames
 using HiGHS
 using JuMP
 
-function scaling_test_resource(; payment=50.0)
+function scaling_test_resource()
     return GenX.Thermal(Dict{Symbol, Any}(
         :resource => "Scaling resource",
         :zone => 1,
         :region => "Scaling region",
         :cluster => 1,
         :derating_factor_1 => 1.0,
-        :capacity_sub_price => payment,
         :max_cap_mw => 2_000.0,
         :inv_cost_per_mwyr => 100.0,
         :fixed_om_cost_per_mwyr => 0.0,
@@ -51,7 +50,9 @@ function capacity_payment_scaling_result(parameter_scale)
         "RESOURCES" => [resource],
         "R_ZONES" => [1],
     )
-    GenX.load_capacity_payment!(settings, "resources", inputs)
+    inputs["NCapacityPaymentRegions"] = 1
+    inputs["capacity_payment_price"] = [50.0 / factor]
+    inputs["CAPACITY_PAYMENT_DERATING_FACTOR"] = reshape([1.0], 1, 1)
 
     model = Model(HiGHS.Optimizer)
     set_silent(model)

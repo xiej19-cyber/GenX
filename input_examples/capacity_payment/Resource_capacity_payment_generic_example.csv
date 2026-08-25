@@ -1,0 +1,9 @@
+Resource,Derating_Factor_1,Derating_Factor_2,Derating_Factor_3,Derating_Factor_4,Derating_Factor_5,Derating_Factor_6,Derating_Factor_7
+example_nuclear_region_1,0.9,0,0,0,0,0,0
+example_biomass_region_1,0.85,0,0,0,0,0,0
+example_wind_region_2,0,0.15,0,0,0,0,0
+example_solar_region_3,0,0,0.05,0,0,0,0
+example_hydro_region_4,0,0,0,0.9,0,0,0
+example_storage_region_5,0,0,0,0,0.8,0,0
+example_coal_region_6,0,0,0,0,0,0.9,0
+example_gas_region_7,0,0,0,0,0,0,0.85
