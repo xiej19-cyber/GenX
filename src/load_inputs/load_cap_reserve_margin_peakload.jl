@@ -55,8 +55,12 @@ Read input parameters related to participation of transmission imports/exports i
 """
 function load_cap_reserve_margin_peakload_trans!(setup::Dict, inputs::Dict, network_var::DataFrame)
     mat = extract_matrix_from_dataframe(network_var, "DerateCapRes")
+    all(x -> x isa Real && isfinite(x) && 0 <= x <= 1, mat) ||
+        error("Network DerateCapRes values for CRM_peakload must be finite values between 0 and 1.")
     inputs["dfDerateTransCapResPeak"] = mat
 
     mat = extract_matrix_from_dataframe(network_var, "CapRes_Excl")
+    all(x -> x isa Real && isfinite(x) && abs(x) <= 1, mat) ||
+        error("Network CapRes_Excl values for CRM_peakload must be finite values between -1 and 1.")
     inputs["dfTransCapRes_exclPeak"] = mat
 end

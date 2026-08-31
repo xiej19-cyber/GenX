@@ -83,6 +83,40 @@ As with losses option 2, this segment-wise approximation of a quadratic loss fun
 \end{aligned}
 ```
 """
+
+"""
+    add_peakload_transmission_capacity_contribution!(EP, inputs)
+
+Add accredited transmission capability to each peak-load CRM balance. A participating
+line contributes its final available transfer capacity (existing capacity plus any
+endogenous reinforcement), multiplied by its `DerateCapRes` factor. `CapRes_Excl` is
+used as a signed incidence/participation flag in the flow-based CRM formulations; its
+absolute value is used here because installed transfer capacity itself has no flow
+direction.
+
+Set a line's `DerateCapRes_r` to zero when that corridor's dedicated generation is
+credited directly to CRM region `r`; otherwise the line and its dedicated generators
+would both receive capacity credit.
+"""
+function add_peakload_transmission_capacity_contribution!(EP::Model, inputs::Dict)
+    L = inputs["L"]
+    NCRM = inputs["NCapacityReserveMargin"]
+    participation = inputs["dfTransCapRes_exclPeak"]
+    derating = inputs["dfDerateTransCapResPeak"]
+
+    @expression(EP,
+        eCapResMarBalancePeakTrans[res = 1:NCRM],
+        sum(abs(participation[l, res]) * derating[l, res] *
+            EP[:eAvail_Trans_Cap][l] for l in 1:L))
+    for res in 1:NCRM
+        add_to_expression!(
+            EP[:eCapResMarBalancePeak][res],
+            eCapResMarBalancePeakTrans[res],
+        )
+    end
+    return nothing
+end
+
 function transmission!(EP::Model, inputs::Dict, setup::Dict)
     println("Transmission Module")
     T = inputs["T"]     # Number of time steps (hours)
@@ -174,15 +208,7 @@ function transmission!(EP::Model, inputs::Dict, setup::Dict)
     # Capacity Reserves Margin peakload policy
     if setup["CRM_peakload"] > 0
         if Z > 1
-            NCRM = inputs["NCapacityReserveMargin"]
-            t_peak = inputs["peak_hour_idx"]
-            @expression(EP,
-                eCapResMarBalancePeakTrans[res = 1:NCRM],
-                sum(inputs["dfTransCapRes_exclPeak"][l, res] *
-                    inputs["dfDerateTransCapResPeak"][l, res] * EP[:vFLOW][l,  t_peak[res]] for l in 1:L))
-            for res in 1:NCRM
-            add_to_expression!(EP[:eCapResMarBalancePeak][res], -1.0*eCapResMarBalancePeakTrans[res])
-            end
+            add_peakload_transmission_capacity_contribution!(EP, inputs)
         end
     end
 

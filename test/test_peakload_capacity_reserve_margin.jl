@@ -40,6 +40,33 @@ end
     end
 end
 
+@testset "transmission contribution uses final rated capacity" begin
+    model = Model(HiGHS.Optimizer)
+    set_silent(model)
+    @variable(model, reinforcement >= 0)
+    model[:eAvail_Trans_Cap] = [2.0 + reinforcement]
+    model[:eCapResMarBalancePeak] = [AffExpr(0.0), AffExpr(0.0)]
+
+    inputs = Dict(
+        "L" => 1,
+        "NCapacityReserveMargin" => 2,
+        "dfTransCapRes_exclPeak" => reshape([-1.0, 1.0], 1, 2),
+        "dfDerateTransCapResPeak" => reshape([0.95, 0.0], 1, 2),
+    )
+
+    GenX.add_peakload_transmission_capacity_contribution!(model, inputs)
+    @constraint(model, reinforcement == 0.5)
+    @objective(model, Min, reinforcement)
+    optimize!(model)
+
+    # Existing 2.0 plus reinforcement 0.5, accredited at 0.95. The sign of
+    # CapRes_Excl is only directional metadata and cannot make capacity negative.
+    @test value(model[:eCapResMarBalancePeak][1]) ≈ 2.375
+    # A zero external derating factor disables line credit without a code change.
+    @test value(model[:eCapResMarBalancePeak][2]) ≈ 0.0
+    @test !haskey(JuMP.object_dictionary(model), :vFLOW)
+end
+
 @testset "price, accredited capacity, and revenue reconcile" begin
     settings = GenX.default_settings()
     settings["CRM_peakload"] = 1
