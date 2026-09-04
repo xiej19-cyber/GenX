@@ -170,6 +170,47 @@ function multihour_scaling_result(parameter_scale; slack=false)
     end
 end
 
+function vre_stor_esr_revenue(parameter_scale)
+    factor = parameter_scale == 1 ? GenX.ModelScalingFactor : 1.0
+    settings = GenX.default_settings()
+    settings["ParameterScale"] = parameter_scale
+
+    case_path = joinpath(@__DIR__, "load_resources", "test_gen_vre_stor")
+    resources_path = joinpath(case_path, settings["ResourcesFolder"])
+    gen = GenX.create_resource_array(settings, resources_path)
+    GenX.add_policies_to_resources!(
+        gen, joinpath(resources_path, settings["ResourcePoliciesFolder"]))
+
+    solar = GenX.solar(gen)
+    wind = GenX.wind(gen)
+    model = Model(HiGHS.Optimizer)
+    @variable(model, vP_SOLAR[solar, 1:1] >= 0)
+    @variable(model, vP_WIND[wind, 1:1] >= 0)
+    fix.(vP_SOLAR, 2_000.0 / factor; force=true)
+    fix.(vP_WIND, 3_000.0 / factor; force=true)
+    @objective(model, Min, 0)
+    optimize!(model)
+
+    inputs = Dict(
+        "RESOURCES" => gen,
+        "RESOURCE_NAMES" => GenX.resource_name.(gen),
+        "G" => length(gen),
+        "nESR" => 1,
+        "omega" => [2.0],
+        "VRE_STOR" => GenX.vre_stor(gen),
+        "VS_SOLAR" => solar,
+        "VS_WIND" => wind,
+    )
+    power = DataFrame(AnnualSum=zeros(length(gen)))
+    prices = DataFrame(ESR_Price=[50.0])
+
+    mktempdir() do output_path
+        revenue = GenX.write_esr_revenue(
+            output_path, inputs, settings, power, prices, model)
+        return revenue.Total
+    end
+end
+
 @testset "new policies are invariant to ParameterScale" begin
     cp_unscaled = capacity_payment_scaling_result(0)
     cp_scaled = capacity_payment_scaling_result(1)
@@ -197,4 +238,9 @@ end
     multi_slack_unscaled = multihour_scaling_result(0; slack=true)
     @test collect(multi_slack_scaled) ≈ collect(multi_slack_unscaled) ≈
           [2_310.0, 1_166_000.0]
+
+    vre_stor_unscaled = vre_stor_esr_revenue(0)
+    vre_stor_scaled = vre_stor_esr_revenue(1)
+    @test vre_stor_scaled ≈ vre_stor_unscaled
+    @test sum(vre_stor_scaled) > 0
 end

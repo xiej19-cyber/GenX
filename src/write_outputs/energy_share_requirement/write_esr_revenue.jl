@@ -24,6 +24,7 @@ function write_esr_revenue(path::AbstractString,
     G = inputs["G"]
     nESR = inputs["nESR"]
     weight = inputs["omega"]
+    power_scale_factor = setup["ParameterScale"] == 1 ? ModelScalingFactor : 1
     # Load VRE-storage inputs
     VRE_STOR = inputs["VRE_STOR"]                                 # Set of VRE-STOR generators (indices)
 
@@ -48,19 +49,19 @@ function write_esr_revenue(path::AbstractString,
         if !isempty(VRE_STOR)
             if !isempty(SOLAR_ONLY)
                 dfESRRev[SOLAR, esr_col] = (value.(EP[:vP_SOLAR][SOLAR, :]).data .*
-                                            etainverter.(gen[SOLAR]) * weight) .*
+                                            etainverter.(gen[SOLAR]) * weight .* power_scale_factor) .*
                                             esr_vrestor.(gen[SOLAR], tag = i) * price
             end
             if !isempty(WIND_ONLY)
-                dfESRRev[WIND, esr_col] = (value.(EP[:vP_WIND][WIND, :]).data * weight) .*
+                dfESRRev[WIND, esr_col] = (value.(EP[:vP_WIND][WIND, :]).data * weight .* power_scale_factor) .*
                                             esr_vrestor.(gen[WIND], tag = i) * price
             end
             if !isempty(SOLAR_WIND)
                 dfESRRev[SOLAR_WIND, esr_col] = (((value.(EP[:vP_WIND][SOLAR_WIND, :]).data * weight) .*
-                                                    esr_vrestor.(gen[SOLAR_WIND], tag = i) * price) +
+                                                    esr_vrestor.(gen[SOLAR_WIND], tag = i) * price .* power_scale_factor) +
                                                     (value.(EP[:vP_SOLAR][SOLAR_WIND, :]).data .*
                                                     etainverter.(gen[SOLAR_WIND]) * weight) .*
-                                                    esr_vrestor.(gen[SOLAR_WIND], tag = i) * price)
+                                                    esr_vrestor.(gen[SOLAR_WIND], tag = i) * price .* power_scale_factor)
             end
         end
     end
