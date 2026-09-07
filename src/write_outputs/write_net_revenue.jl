@@ -3,6 +3,58 @@
 
 Function for writing net revenue of different generation technologies.
 """
+
+function _sum_net_revenue_columns(df::DataFrame, columns)
+    return reduce((total, column) -> total .+ df[!, column],
+        columns;
+        init = zeros(nrow(df)))
+end
+
+function _add_net_revenue_totals!(dfNetRevenue::DataFrame)
+    revenue_columns = (
+        :EnergyRevenue,
+        :SubsidyRevenue,
+        :OperatingReserveRevenue,
+        :OperatingRegulationRevenue,
+        :ReserveMarginRevenue,
+        :ReserveMarginRevenue_peakload,
+        :ReserveMarginRevenue_multihours,
+        :ESRRevenue,
+        :RegSubsidyRevenue,
+        :CapacityPaymentRevenue,
+    )
+    cost_columns = (
+        :Inv_cost_MW,
+        :Inv_cost_MWh,
+        :Inv_cost_charge_MW,
+        :Fixed_OM_cost_MW,
+        :Fixed_AMT_cost_MW,
+        :Fixed_OM_cost_MWh,
+        :Fixed_AMT_cost_MWh,
+        :Fixed_OM_cost_charge_MW,
+        :Fixed_AMT_cost_charge_MW,
+        :Var_OM_cost_out,
+        :Fuel_cost,
+        :Var_OM_cost_in,
+        :StartCost,
+        :Charge_cost,
+        :CO2SequestrationCost,
+        :EmissionsCost,
+    )
+    # Fixed subsidy fields are reported as positive benefits, so they reduce cost.
+    fixed_subsidy_columns = (
+        :Fixed_Subsidy_MW,
+        :Fixed_Subsidy_MWh,
+        :Fixed_Subsidy_charge_MW,
+    )
+
+    dfNetRevenue.Revenue = _sum_net_revenue_columns(dfNetRevenue, revenue_columns)
+    dfNetRevenue.Cost = _sum_net_revenue_columns(dfNetRevenue, cost_columns) .-
+                        _sum_net_revenue_columns(dfNetRevenue, fixed_subsidy_columns)
+    dfNetRevenue.Profit = dfNetRevenue.Revenue .- dfNetRevenue.Cost
+    return dfNetRevenue
+end
+
 function write_net_revenue(path::AbstractString,
         inputs::Dict,
         setup::Dict,
@@ -296,38 +348,7 @@ function write_net_revenue(path::AbstractString,
         dfNetRevenue.CapacityPaymentRevenue = value.(EP[:eCapPayment][1:G]) .* monetary_scale_factor
     end
 
-    dfNetRevenue.Revenue = dfNetRevenue.EnergyRevenue
-    .+dfNetRevenue.SubsidyRevenue
-    .+dfNetRevenue.ReserveMarginRevenue
-    .+dfNetRevenue.ReserveMarginRevenue_peakload
-    .+dfNetRevenue.ReserveMarginRevenue_multihours
-    .+dfNetRevenue.ESRRevenue
-    .+dfNetRevenue.RegSubsidyRevenue
-    .+dfNetRevenue.OperatingReserveRevenue
-    .+dfNetRevenue.OperatingRegulationRevenue
-    .+dfNetRevenue.CapacityPaymentRevenue  
-
-
-    dfNetRevenue.Cost = (dfNetRevenue.Inv_cost_MW .+
-                         dfNetRevenue.Inv_cost_MWh .+
-                         dfNetRevenue.Inv_cost_charge_MW .+
-                         dfNetRevenue.Fixed_OM_cost_MW .+
-                         dfNetRevenue.Fixed_OM_cost_MWh .+
-                         dfNetRevenue.Fixed_OM_cost_charge_MW .+
-                        dfNetRevenue.Fixed_AMT_cost_MW .+
-                        dfNetRevenue.Fixed_AMT_cost_MWh .+
-                        dfNetRevenue.Fixed_AMT_cost_charge_MW .-
-                        dfNetRevenue.Fixed_Subsidy_MW .-
-                        dfNetRevenue.Fixed_Subsidy_MWh .-
-                        dfNetRevenue.Fixed_Subsidy_charge_MW .+
-                         dfNetRevenue.Var_OM_cost_out .+
-                         dfNetRevenue.Var_OM_cost_in .+
-                         dfNetRevenue.Fuel_cost .+
-                         dfNetRevenue.Charge_cost .+
-                         dfNetRevenue.EmissionsCost .+
-                         dfNetRevenue.StartCost .+
-                         dfNetRevenue.CO2SequestrationCost)
-    dfNetRevenue.Profit = dfNetRevenue.Revenue .- dfNetRevenue.Cost
+    _add_net_revenue_totals!(dfNetRevenue)
 
     CSV.write(joinpath(path, "NetRevenue.csv"), dfNetRevenue)
 end

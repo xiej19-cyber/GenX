@@ -108,3 +108,57 @@ end
 
     @test_logs (:warn, r"model may be unbounded") GenX.capacity_payment!(model, inputs, setup)
 end
+
+@testset "net revenue totals include every reported component" begin
+    revenue_columns = [
+        :EnergyRevenue,
+        :SubsidyRevenue,
+        :OperatingReserveRevenue,
+        :OperatingRegulationRevenue,
+        :ReserveMarginRevenue,
+        :ReserveMarginRevenue_peakload,
+        :ReserveMarginRevenue_multihours,
+        :ESRRevenue,
+        :RegSubsidyRevenue,
+        :CapacityPaymentRevenue,
+    ]
+    cost_columns = [
+        :Inv_cost_MW,
+        :Inv_cost_MWh,
+        :Inv_cost_charge_MW,
+        :Fixed_OM_cost_MW,
+        :Fixed_AMT_cost_MW,
+        :Fixed_OM_cost_MWh,
+        :Fixed_AMT_cost_MWh,
+        :Fixed_OM_cost_charge_MW,
+        :Fixed_AMT_cost_charge_MW,
+        :Var_OM_cost_out,
+        :Fuel_cost,
+        :Var_OM_cost_in,
+        :StartCost,
+        :Charge_cost,
+        :CO2SequestrationCost,
+        :EmissionsCost,
+    ]
+    fixed_subsidy_columns = [
+        :Fixed_Subsidy_MW,
+        :Fixed_Subsidy_MWh,
+        :Fixed_Subsidy_charge_MW,
+    ]
+    df = DataFrame()
+    for column in revenue_columns
+        df[!, column] = [1.0, 2.0]
+    end
+    for column in cost_columns
+        df[!, column] = [3.0, 4.0]
+    end
+    for column in fixed_subsidy_columns
+        df[!, column] = [0.5, 1.0]
+    end
+
+    GenX._add_net_revenue_totals!(df)
+
+    @test df.Revenue == [10.0, 20.0]
+    @test df.Cost == [46.5, 61.0]
+    @test df.Profit == [-36.5, -41.0]
+end
