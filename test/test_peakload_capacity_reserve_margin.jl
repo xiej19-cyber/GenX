@@ -45,13 +45,13 @@ end
     set_silent(model)
     @variable(model, reinforcement >= 0)
     model[:eAvail_Trans_Cap] = [2.0 + reinforcement]
-    model[:eCapResMarBalancePeak] = [AffExpr(0.0), AffExpr(0.0)]
+    model[:eCapResMarBalancePeak] = [AffExpr(0.0), AffExpr(0.0), AffExpr(0.0)]
 
     inputs = Dict(
         "L" => 1,
-        "NCapacityReserveMargin" => 2,
-        "dfTransCapRes_exclPeak" => reshape([-1.0, 1.0], 1, 2),
-        "dfDerateTransCapResPeak" => reshape([0.95, 0.0], 1, 2),
+        "NCapacityReserveMargin" => 3,
+        "dfTransCapRes_exclPeak" => reshape([-1.0, 1.0, -1.0], 1, 3),
+        "dfDerateTransCapResPeak" => reshape([0.95, 0.95, 0.0], 1, 3),
     )
 
     GenX.add_peakload_transmission_capacity_contribution!(model, inputs)
@@ -59,11 +59,13 @@ end
     @objective(model, Min, reinforcement)
     optimize!(model)
 
-    # Existing 2.0 plus reinforcement 0.5, accredited at 0.95. The sign of
-    # CapRes_Excl is only directional metadata and cannot make capacity negative.
+    # Existing 2.0 plus reinforcement 0.5, accredited at 0.95. GenX uses -1 for
+    # the receiving region, which is credited with the firm capacity transfer.
     @test value(model[:eCapResMarBalancePeak][1]) ≈ 2.375
+    # GenX uses +1 for the sending region, from which the same transfer is deducted.
+    @test value(model[:eCapResMarBalancePeak][2]) ≈ -2.375
     # A zero external derating factor disables line credit without a code change.
-    @test value(model[:eCapResMarBalancePeak][2]) ≈ 0.0
+    @test value(model[:eCapResMarBalancePeak][3]) ≈ 0.0
     @test !haskey(JuMP.object_dictionary(model), :vFLOW)
 end
 

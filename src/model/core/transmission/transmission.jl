@@ -89,10 +89,11 @@ As with losses option 2, this segment-wise approximation of a quadratic loss fun
 
 Add accredited transmission capability to each peak-load CRM balance. A participating
 line contributes its final available transfer capacity (existing capacity plus any
-endogenous reinforcement), multiplied by its `DerateCapRes` factor. `CapRes_Excl` is
-used as a signed incidence/participation flag in the flow-based CRM formulations; its
-absolute value is used here because installed transfer capacity itself has no flow
-direction.
+endogenous reinforcement), multiplied by its `DerateCapRes` factor. GenX defines
+`CapRes_Excl = 1` for the sending CRM region and `CapRes_Excl = -1` for the receiving
+CRM region. The leading minus sign therefore deducts firm exports from the sender and
+credits the same firm transfer to the receiver. Set `DerateCapRes` to zero when firm
+capacity transfers are not modeled.
 
 Set a line's `DerateCapRes_r` to zero when that corridor's dedicated generation is
 credited directly to CRM region `r`; otherwise the line and its dedicated generators
@@ -106,7 +107,7 @@ function add_peakload_transmission_capacity_contribution!(EP::Model, inputs::Dic
 
     @expression(EP,
         eCapResMarBalancePeakTrans[res = 1:NCRM],
-        sum(abs(participation[l, res]) * derating[l, res] *
+        sum(-participation[l, res] * derating[l, res] *
             EP[:eAvail_Trans_Cap][l] for l in 1:L))
     for res in 1:NCRM
         add_to_expression!(
