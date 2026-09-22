@@ -804,7 +804,7 @@ end
 Create a DataFrame with all 8,760 hours of the year from the reduced output.
 
 This function calls `full_time_series_reconstruction()` to create a new DataFrame with 8,760 time steps, as well as other pre-existing rows such as "Zone".
-When GenX TDR is enabled, `Period_map.csv` maps each modeled week to its representative week. When TDR is disabled and the user supplies exactly four 168-hour weeks, input order is interpreted as spring, summer, autumn, and winter and the weeks are repeated over their corresponding calendar months.
+When GenX TDR is enabled, `Period_map.csv` maps each modeled week to its representative week. When TDR is disabled, TDR settings are ignored. Four 168-hour input weeks are interpreted as spring, summer, autumn, and winter; twelve are interpreted in January-to-December order. The representative weeks are repeated over their corresponding calendar blocks.
 
 Note: Currently, TDR only gives the representative periods in Period_map for 52 weeks, when a (non-leap) year is 52 weeks + 24 hours. This function takes the last 24 hours of 
 the time series and copies them to get up to all 8,760 hours in a year.

@@ -214,4 +214,33 @@ mktempdir() do manual_case
     Test.@test reconstructed[2 + 24 * 334, 2] == 505.0     # December: winter
 end
 
+# With TDR disabled, twelve user-provided weeks are interpreted in January-to-
+# December order. Each monthly representative week restarts at its month boundary.
+mktempdir() do manual_case
+    mkpath(joinpath(manual_case, "system"))
+    monthly_demand = DataFrames.DataFrame(
+        Rep_Periods = Union{Missing, Int}[12; fill(missing, 2015)],
+        Timesteps_per_Rep_Period = Union{Missing, Int}[168; fill(missing, 2015)],
+        Time_Index = 1:2016,
+    )
+    CSV.write(joinpath(manual_case, "system", "Demand_data.csv"), monthly_demand)
+    monthly_output = DataFrames.DataFrame(
+        x1 = ["Resource"; ["t$i" for i in 1:2016]],
+        x2 = Any["Example"; collect(1.0:2016.0)],
+    )
+    monthly_setup = Dict{String, Any}(
+        "MultiStage" => 0,
+        "TimeDomainReduction" => 0,
+        "SystemFolder" => "system",
+    )
+    reconstructed = GenX.full_time_series_reconstruction(
+        joinpath(manual_case, "results"), monthly_setup, monthly_output)
+    Test.@test nrow(reconstructed) == 8761
+    month_start_days = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
+    for (month, start_day) in enumerate(month_start_days)
+        Test.@test reconstructed[2 + 24 * start_day, 2] == 168.0 * (month - 1) + 1
+    end
+    Test.@test reconstructed[2 + 7 * 24, 2] == 1.0 # January week repeats
+end
+
 end # module TestTDR

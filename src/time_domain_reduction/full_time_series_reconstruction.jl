@@ -17,14 +17,17 @@ function full_time_series_reconstruction(
         dirs = splitpath(path)
         case = joinpath(dirs[.!occursin.("result", dirs)])  # Get the case folder without the "results" folder(s)
         cur_stage = setup["MultiStageSettingsDict"]["CurStage"]
-        TDRpath = joinpath(case, "inputs", string("inputs_p", cur_stage),
-            setup["TimeDomainReductionFolder"])
+        stage_case = joinpath(case, "inputs", string("inputs_p", cur_stage))
+        if setup["TimeDomainReduction"] == 0
+            return manual_representative_week_full_time_series(stage_case, setup, DF)
+        end
+        TDRpath = joinpath(stage_case, setup["TimeDomainReductionFolder"])
     elseif setup["TimeDomainReduction"] == 1
         case = dirname(path)
         TDRpath = joinpath(case, setup["TimeDomainReductionFolder"])
     else
         case = dirname(path)
-        return manual_four_week_full_time_series(case, setup, DF)
+        return manual_representative_week_full_time_series(case, setup, DF)
     end
     # Read Period map file Period_map.csv
     Period_map = CSV.read(joinpath(TDRpath, "Period_map.csv"), DataFrame)
@@ -82,22 +85,25 @@ function full_time_series_reconstruction(
 end
 
 """
-    manual_four_week_full_time_series(case, setup, DF)
+    manual_representative_week_full_time_series(case, setup, DF)
 
-Reconstruct a non-leap calendar year from four user-provided representative
-weeks when GenX's TDR preprocessing is disabled. The representative weeks are
+Reconstruct a non-leap calendar year from user-provided representative weeks
+when GenX's TDR preprocessing is disabled. Four representative weeks are
 interpreted in input order as spring (March-May), summer (June-August), autumn
-(September-November), and winter (January, February, and December). Each week
-is repeated within its calendar block and truncated at the block boundary.
+(September-November), and winter (January, February, and December). Twelve
+representative weeks are interpreted in calendar-month order from January to
+December. Each week is repeated within its calendar block and truncated at the
+block boundary.
 
 This function only expands output rows. It does not modify `Sub_Weights`, model
 weights, annual sums, or any optimization result.
 """
-function manual_four_week_full_time_series(
+function manual_representative_week_full_time_series(
         case::AbstractString, setup::Dict, DF::DataFrame)
     demand_path = joinpath(case, setup["SystemFolder"], "Demand_data.csv")
     isfile(demand_path) || error(
-        "Cannot reconstruct a manual four-week time series: $demand_path was not found.")
+        "Cannot reconstruct a manual representative-week time series: " *
+        "$demand_path was not found.")
     demand = CSV.read(demand_path, DataFrame;
         select = ["Rep_Periods", "Timesteps_per_Rep_Period", "Time_Index"])
     representative_periods = only(collect(skipmissing(demand.Rep_Periods)))
@@ -111,20 +117,28 @@ function manual_four_week_full_time_series(
     # Full_TimeSeries folder.
     available_hours == 8760 && return copy(DF)
 
-    representative_periods == 4 && hours_per_period == 168 || error(
+    representative_periods in (4, 12) && hours_per_period == 168 || error(
         "Automatic full-year reconstruction with TimeDomainReduction=0 requires " *
-        "either 8760 modeled hours or exactly four 168-hour representative weeks " *
+        "either 8760 modeled hours, four seasonal 168-hour representative weeks, " *
+        "or twelve monthly 168-hour representative weeks " *
         "in Demand_data.csv; found $representative_periods periods of " *
         "$hours_per_period hours and $available_hours output hours.")
     expected_hours = representative_periods * hours_per_period
     available_hours == expected_hours || error(
-        "Manual four-week reconstruction expected $expected_hours modeled hours, " *
+        "Manual representative-week reconstruction expected $expected_hours modeled hours, " *
         "but the output contains $available_hours.")
 
-    # Non-leap-year calendar blocks. Winter is split at the year boundary, so
-    # January-February and December each restart at hour 1 of representative week 4.
-    block_days = [31 + 28, 31 + 30 + 31, 30 + 31 + 31, 30 + 31 + 30, 31]
-    block_representatives = [4, 1, 2, 3, 4]
+    if representative_periods == 4
+        # Winter is split at the year boundary, so January-February and December
+        # each restart at hour 1 of representative week 4.
+        block_days = [31 + 28, 31 + 30 + 31, 30 + 31 + 31, 30 + 31 + 30, 31]
+        block_representatives = [4, 1, 2, 3, 4]
+    else
+        # One representative week per calendar month, supplied in January-to-
+        # December order. Restart the representative week at each month boundary.
+        block_days = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        block_representatives = 1:12
+    end
     source_hours = Int[]
     sizehint!(source_hours, 8760)
     for (days, representative_period) in zip(block_days, block_representatives)
@@ -134,7 +148,7 @@ function manual_four_week_full_time_series(
             representative_start .+ mod.(0:(block_hours - 1), hours_per_period) .+ 1)
     end
     length(source_hours) == 8760 || error(
-        "Internal error constructing the manual four-week calendar mapping.")
+        "Internal error constructing the manual representative-week calendar mapping.")
 
     metadata_rows = t1 - 1
     reconstructed = Matrix{Any}(undef, metadata_rows + 8760, ncol(DF))
@@ -146,3 +160,12 @@ function manual_four_week_full_time_series(
         Matrix(DF[t1 .+ source_hours .- 1, 2:end])
     return DataFrame(reconstructed, :auto)
 end
+
+"""
+    manual_four_week_full_time_series(case, setup, DF)
+
+Backward-compatible name for [`manual_representative_week_full_time_series`](@ref).
+The implementation also accepts twelve monthly representative weeks.
+"""
+manual_four_week_full_time_series(case::AbstractString, setup::Dict, DF::DataFrame) =
+    manual_representative_week_full_time_series(case, setup, DF)
