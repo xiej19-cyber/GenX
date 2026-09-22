@@ -84,12 +84,15 @@ for selected thermal resources in each zone:
 
 ```math
 \sum_{y \in H_z} \Omega^{size}_y \nu_{y,t}
-\geq \underline{f}_{z,t} \sum_{y \in H_z} \Delta^{total}_y
+\geq \underline{f}_{z,t} \sum_{y \in H_z}
+\alpha^{minimum\ commitment}_y \Delta^{total}_y
 ```
 
-Here `pMinimumCommitment[z,t]` is a fraction of the total installed capacity of
-resources marked `Minimum_Commitment = 1`. This constrains online capacity, not
-the power-output variable. A zero profile leaves a zone unconstrained.
+Here `pMinimumCommitment[z,t]` is applied to the policy capacity total. A
+resource's `Minimum_Commitment` value is the fraction of its installed capacity
+included in that total. Resources with a positive value contribute their actual
+online capacity to the left-hand side. This constrains online capacity, not the
+power-output variable. A zero profile leaves a zone unconstrained.
 """
 function minimum_commitment!(EP::Model, inputs::Dict)
     coal_zones = get(inputs, "MINIMUM_COMMITMENT_ZONES", Int[])
@@ -104,7 +107,9 @@ function minimum_commitment!(EP::Model, inputs::Dict)
         resources_by_zone = inputs["MINIMUM_COMMITMENT_BY_ZONE"]
         @constraint(EP, cMinimumCommitment[z in coal_zones, t in 1:T],
             sum(cap_size(gen[y]) * EP[:vCOMMIT][y, t] for y in resources_by_zone[z]) >=
-            profile[z, t] * sum(EP[:eTotalCap][y] for y in resources_by_zone[z]))
+            profile[z, t] *
+            sum(minimum_commitment_fraction(gen[y]) * EP[:eTotalCap][y]
+                for y in resources_by_zone[z]))
     end
 
     if !isempty(gas_zones)
@@ -112,7 +117,9 @@ function minimum_commitment!(EP::Model, inputs::Dict)
         resources_by_zone = inputs["MINIMUM_COMMITMENT_GAS_BY_ZONE"]
         @constraint(EP, cMinimumCommitmentGas[z in gas_zones, t in 1:T],
             sum(cap_size(gen[y]) * EP[:vCOMMIT][y, t] for y in resources_by_zone[z]) >=
-            profile[z, t] * sum(EP[:eTotalCap][y] for y in resources_by_zone[z]))
+            profile[z, t] *
+            sum(minimum_commitment_fraction(gen[y]) * EP[:eTotalCap][y]
+                for y in resources_by_zone[z]))
     end
     return EP
 end

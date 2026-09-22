@@ -917,6 +917,7 @@ Returns the indices of all thermal resources in the vector `rs`.
 thermal(rs::Vector{T}) where {T <: AbstractResource} = findall(r -> isa(r, Thermal), rs)
 up_time(r::Thermal) = get(r, :up_time, default_zero)
 down_time(r::Thermal) = get(r, :down_time, default_zero)
+minimum_commitment_fraction(r::Thermal) = get(r, :minimum_commitment, default_zero)
 function pwfu_fuel_usage_zero_load_mmbtu_per_h(r::Thermal)
     get(r, :pwfu_fuel_usage_zero_load_mmbtu_per_h, default_zero)
 end

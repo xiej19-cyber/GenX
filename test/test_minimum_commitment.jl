@@ -3,7 +3,7 @@ using CSV
 using DataFrames
 
 function minimum_commitment_test_resource(name, id, zone, cap;
-        eligible = 1, model = 1, fuel = "coal_test")
+        eligible = 1.0, model = 1, fuel = "coal_test")
     GenX.Thermal(Dict{Symbol, Any}(
         :resource => name,
         :id => id,
@@ -17,9 +17,10 @@ end
 
 @testset "Zonal minimum commitment constraint" begin
     gen = [
-        minimum_commitment_test_resource("coal_1", 1, 1, 100.0),
+        minimum_commitment_test_resource("coal_1", 1, 1, 100.0; eligible = 0.5),
         minimum_commitment_test_resource("coal_2", 2, 1, 200.0),
-        minimum_commitment_test_resource("coal_3", 3, 2, 100.0),
+        minimum_commitment_test_resource("coal_3", 3, 2, 100.0;
+            eligible = 0.25),
     ]
     model = Model()
     @variable(model, vCOMMIT[y in 1:3, t in 1:2] >= 0)
@@ -39,11 +40,11 @@ end
     constraint = model[:cMinimumCommitment][1, 1]
     @test normalized_coefficient(constraint, model[:vCOMMIT][1, 1]) == 100.0
     @test normalized_coefficient(constraint, model[:vCOMMIT][2, 1]) == 200.0
-    @test normalized_rhs(constraint) == 500.0
-    @test normalized_rhs(model[:cMinimumCommitment][1, 2]) == 750.0
+    @test normalized_rhs(constraint) == 400.0
+    @test normalized_rhs(model[:cMinimumCommitment][1, 2]) == 600.0
     @test normalized_coefficient(
         model[:cMinimumCommitmentGas][1, 1], model[:vCOMMIT][3, 1]) == 100.0
-    @test normalized_rhs(model[:cMinimumCommitmentGas][1, 1]) == 50.0
+    @test normalized_rhs(model[:cMinimumCommitmentGas][1, 1]) == 12.5
 
     model_without_profile = Model()
     @variable(model_without_profile, vCOMMIT[y in 1:1, t in 1:1] >= 0)
@@ -85,7 +86,8 @@ end
             "SystemFolder" => "system",
         )
         gen = [
-            minimum_commitment_test_resource("coal_1", 1, 1, 100.0),
+            minimum_commitment_test_resource("coal_1", 1, 1, 100.0;
+                eligible = 0.5),
             minimum_commitment_test_resource("coal_2", 2, 1, 200.0; eligible = 0),
             minimum_commitment_test_resource("gas_1", 3, 2, 100.0;
                 fuel = "naturalgas_test"),
@@ -120,6 +122,11 @@ end
 
         CSV.write(joinpath(system_path, "Minimum_commitment_coal.csv"),
             DataFrame(Time_Index = 1:4, Zone_1 = fill(0.5, 4)))
+        @test_throws AssertionError GenX.load_minimum_commitment!(setup, case_path, inputs)
+
+        CSV.write(joinpath(system_path, "Minimum_commitment_coal.csv"),
+            DataFrame(Time_Index = 1:3, Zone_1 = fill(0.5, 3)))
+        gen[1].minimum_commitment = 1.1
         @test_throws AssertionError GenX.load_minimum_commitment!(setup, case_path, inputs)
     end
 end

@@ -48,9 +48,10 @@ end
 	load_minimum_commitment!(setup::Dict, path::AbstractString, inputs::Dict)
 
 Load optional zonal, hourly minimum commitment fractions for coal and natural
-gas from `Minimum_commitment_coal.csv` and `Minimum_commitment_gas.csv`. Both groups
-use the `Minimum_Commitment = 1` flag in `Thermal.csv`; the resource `Fuel`
-value separates coal (`coal_*`) from gas (`naturalgas_*`).
+gas from `Minimum_commitment_coal.csv` and `Minimum_commitment_gas.csv`. The
+`Minimum_Commitment` value in `Thermal.csv` is the fraction of each resource's
+capacity included in the policy capacity total. The resource `Fuel` value
+separates coal (`coal_*`) from gas (`naturalgas_*`).
 """
 function load_minimum_commitment!(setup::Dict, path::AbstractString, inputs::Dict)
     TDR_directory = joinpath(path, setup["TimeDomainReductionFolder"])
@@ -58,13 +59,21 @@ function load_minimum_commitment!(setup::Dict, path::AbstractString, inputs::Dic
 
     gen = inputs["RESOURCES"]
     committed = inputs["THERM_COMMIT"]
-    eligible = [y for y in committed if get(gen[y], :minimum_commitment, 0) == 1]
+    invalid = [y for y in committed if
+               !(minimum_commitment_fraction(gen[y]) isa Real &&
+                 isfinite(minimum_commitment_fraction(gen[y])) &&
+                 0 <= minimum_commitment_fraction(gen[y]) <= 1)]
+    @assert(isempty(invalid),
+        "Minimum_Commitment must be a finite fraction between 0 and 1. " *
+        "Invalid resources: $(join(resource_name.(gen[invalid]), ", ")).")
+
+    eligible = [y for y in committed if minimum_commitment_fraction(gen[y]) > 0]
     coal = [y for y in eligible if startswith(lowercase(fuel(gen[y])), "coal")]
     gas = [y for y in eligible if startswith(lowercase(fuel(gen[y])), "naturalgas")]
 
     unclassified = setdiff(eligible, union(coal, gas))
     @assert(isempty(unclassified),
-        "Resources marked Minimum_Commitment = 1 must use a Fuel beginning with " *
+        "Resources with Minimum_Commitment > 0 must use a Fuel beginning with " *
         "coal or naturalgas. Unclassified resources: " *
         "$(join(resource_name.(gen[unclassified]), ", ")).")
 
