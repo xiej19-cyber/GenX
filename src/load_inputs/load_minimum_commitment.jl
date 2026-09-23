@@ -47,11 +47,10 @@ end
 @doc raw"""
 	load_minimum_commitment!(setup::Dict, path::AbstractString, inputs::Dict)
 
-Load optional zonal, hourly minimum commitment fractions for coal and natural
-gas from `Minimum_commitment_coal.csv` and `Minimum_commitment_gas.csv`. The
+Load optional zonal, hourly minimum commitment fractions for one combined pool
+of coal and natural-gas resources from `Minimum_commitment.csv`. The
 `Minimum_Commitment` value in `Thermal.csv` is the fraction of each resource's
-capacity included in the policy capacity total. The resource `Fuel` value
-separates coal (`coal_*`) from gas (`naturalgas_*`).
+capacity included in the policy capacity total.
 """
 function load_minimum_commitment!(setup::Dict, path::AbstractString, inputs::Dict)
     TDR_directory = joinpath(path, setup["TimeDomainReductionFolder"])
@@ -68,35 +67,27 @@ function load_minimum_commitment!(setup::Dict, path::AbstractString, inputs::Dic
         "Invalid resources: $(join(resource_name.(gen[invalid]), ", ")).")
 
     eligible = [y for y in committed if minimum_commitment_fraction(gen[y]) > 0]
-    coal = [y for y in eligible if startswith(lowercase(fuel(gen[y])), "coal")]
-    gas = [y for y in eligible if startswith(lowercase(fuel(gen[y])), "naturalgas")]
+    coal_or_gas = [y for y in eligible if
+                   startswith(lowercase(fuel(gen[y])), "coal") ||
+                   startswith(lowercase(fuel(gen[y])), "naturalgas")]
 
-    unclassified = setdiff(eligible, union(coal, gas))
+    unclassified = setdiff(eligible, coal_or_gas)
     @assert(isempty(unclassified),
         "Resources with Minimum_Commitment > 0 must use a Fuel beginning with " *
         "coal or naturalgas. Unclassified resources: " *
         "$(join(resource_name.(gen[unclassified]), ", ")).")
 
-    by_zone(resources) = [
-        [y for y in resources if zone_id(gen[y]) == z] for z in 1:inputs["Z"]
+    resources_by_zone = [
+        [y for y in coal_or_gas if zone_id(gen[y]) == z] for z in 1:inputs["Z"]
     ]
-    coal_by_zone = by_zone(coal)
-    gas_by_zone = by_zone(gas)
 
-    coal_filename = "Minimum_commitment_coal.csv"
-    gas_filename = "Minimum_commitment_gas.csv"
-    coal_profile, coal_zones = _load_minimum_commitment_profile(
-        joinpath(input_directory, coal_filename), coal_filename, inputs, coal_by_zone)
-    gas_profile, gas_zones = _load_minimum_commitment_profile(
-        joinpath(input_directory, gas_filename), gas_filename, inputs, gas_by_zone)
+    filename = "Minimum_commitment.csv"
+    profile, zones = _load_minimum_commitment_profile(
+        joinpath(input_directory, filename), filename, inputs, resources_by_zone)
 
-    inputs["MINIMUM_COMMITMENT_RESOURCES"] = coal
-    inputs["MINIMUM_COMMITMENT_BY_ZONE"] = coal_by_zone
-    inputs["pMinimumCommitment"] = coal_profile
-    inputs["MINIMUM_COMMITMENT_ZONES"] = coal_zones
-    inputs["MINIMUM_COMMITMENT_GAS_RESOURCES"] = gas
-    inputs["MINIMUM_COMMITMENT_GAS_BY_ZONE"] = gas_by_zone
-    inputs["pMinimumCommitmentGas"] = gas_profile
-    inputs["MINIMUM_COMMITMENT_GAS_ZONES"] = gas_zones
+    inputs["MINIMUM_COMMITMENT_RESOURCES"] = coal_or_gas
+    inputs["MINIMUM_COMMITMENT_BY_ZONE"] = resources_by_zone
+    inputs["pMinimumCommitment"] = profile
+    inputs["MINIMUM_COMMITMENT_ZONES"] = zones
     return nothing
 end

@@ -30,7 +30,7 @@ Additionally, the user may need to specify eight more **settings-specific** inpu
 7. Vre\_and\_stor\_solar\_variability.csv: specify time-series of capacity factor/availability for each solar PV resource that exists for every co-located VRE and storage resource (in DC terms).
 8. Vre\_and\_stor\_wind\_variability.csv: specify time-series of capacity factor/availability for each wind resource that exists for every co-located VRE and storage resource (in AC terms).
 9. Hydrogen\_demand.csv: specify regional hydrogen production requirements.
-10. Minimum\_commitment\_coal.csv and Minimum\_commitment\_gas.csv: optionally specify separate zonal, hourly minimum online-capacity fractions for selected coal and natural-gas resources with unit commitment.
+10. Minimum\_commitment.csv: optionally specify zonal, hourly minimum online-capacity fractions for a combined pool of selected coal and natural-gas resources with unit commitment.
 
 
 !!! note "Note"
@@ -695,11 +695,11 @@ This file contains the time-series of capacity factors / availability of each re
 
 With `NarrowVariability = 1`, `Thermal.csv` may use `MinVar` tags to reference additional shared columns in this file. Each value is the absolute hourly minimum output fraction for an online unit and directly replaces the resource's static `Min_Power`; it is not a multiplier. For every committed thermal resource and hour, GenX validates that `MinVar` lies in `[0,1]` and does not exceed `MaxVar`. The hourly minimum is used consistently in minimum generation, regulation-reserve, startup, shutdown, and ramping constraints.
 
-#### 1.5.1 Minimum\_commitment\_coal.csv and Minimum\_commitment\_gas.csv (optional)
+#### 1.5.1 Minimum\_commitment.csv (optional)
 
 This optional file imposes a zonal, hourly lower bound on aggregate online capacity for selected thermal resources with `Model = 1` when `UCommit >= 1`. The first column is `Time_Index`; subsequent columns are named `Zone_1`, `Zone_2`, ..., `Zone_Z`. Values are fractions between 0 and 1, and omitted zones are unconstrained.
 
-Add a `Minimum_Commitment` column to `Thermal.csv`. Its value must be between `0` and `1` and specifies the fraction of each coal or natural-gas resource's capacity included in the policy capacity total. For example, `0.5` includes 50% of that resource's installed capacity in the right-hand-side total; `0` excludes the resource. Candidate resources may also use a positive value when a fraction of new capacity should be covered. GenX separates resources with positive values by the `Fuel` prefix: `coal*` resources use `Minimum_commitment_coal.csv`, while `naturalgas*` resources use `Minimum_commitment_gas.csv`. For example, `Zone_1 = 0.7` requires the aggregate committed capacity of included resources in that fuel group and Zone 1 to be at least 70% of the policy capacity total. Mathematically, GenX enforces `sum(Cap_Size[y] * vCOMMIT[y,t]) >= fraction[z,t] * sum(Minimum_Commitment[y] * eTotalCap[y])` separately for coal and gas. A resource with `Minimum_Commitment > 0` contributes its actual online capacity to the left-hand side, while the input fraction weights only its contribution to the policy capacity total. This constrains online capacity rather than generation output `vP`. With `UCommit = 2`, committed capacity is continuous, so the constraint does not require an integer number of units.
+Add a `Minimum_Commitment` column to `Thermal.csv`. Its value must be between `0` and `1` and specifies the fraction of each coal or natural-gas resource's capacity included in the policy capacity total. For example, `0.5` includes 50% of that resource's installed capacity in the right-hand-side total; `0` excludes the resource. Candidate resources may also use a positive value when a fraction of new capacity should be covered. Coal and natural-gas resources with positive values form one combined pool in each zone. For example, `Zone_1 = 0.7` requires the aggregate committed capacity of the included coal and gas resources in Zone 1 to be at least 70% of their combined policy capacity total. Mathematically, GenX enforces `sum(Cap_Size[y] * vCOMMIT[y,t]) >= fraction[z,t] * sum(Minimum_Commitment[y] * eTotalCap[y])` over the combined pool. A resource with `Minimum_Commitment > 0` contributes its actual online capacity to the left-hand side, while the input fraction weights only its contribution to the policy capacity total. This constrains online capacity rather than generation output `vP`. With `UCommit = 2`, committed capacity is continuous, so the constraint does not require an integer number of units.
 
 Example:
 
@@ -710,7 +710,7 @@ Time_Index,Zone_1,Zone_2
 3,0.65,0.50
 ```
 
-Place the full-resolution inputs in the configured system-data directory, normally `system/Minimum_commitment_coal.csv` for coal and `system/Minimum_commitment_gas.csv` for gas. Either file may be omitted to disable that group's constraint. Without time-domain reduction, GenX reads these files directly. When TDR is run, GenX extracts the same representative-period rows used for the other hourly inputs and writes aligned profiles into the TDR output directory automatically; users should not prepare reduced files manually. Each active file must contain exactly one row per model time step.
+Place the input in the configured system-data directory, normally `system/Minimum_commitment.csv`. Omitting the file disables the constraint. Without time-domain reduction, GenX reads this file directly. When TDR is run, GenX extracts the same representative-period rows used for the other hourly inputs and writes an aligned internal copy into the TDR output directory automatically; users still maintain only the file in `system`. The active file must contain exactly one row per model time step used by the source time series.
 
 ###### Table 21: Structure of the Generator\_variability.csv file
 ---

@@ -976,7 +976,7 @@ function write_tdr_minimum_commitment_from_raw(
         output_dir::String,
         M,
         TimestepsPerRepPeriod::Int;
-        filename::String = "Minimum_commitment_coal.csv")
+        filename::String = "Minimum_commitment.csv")
     raw_path = joinpath(raw_system_dir, filename)
     isfile(raw_path) || return nothing
 
@@ -1090,7 +1090,7 @@ function write_tdr_minimum_commitment_from_raw_multistage_concat(
         output_dir::String,
         M,
         TimestepsPerRepPeriod::Int;
-        filename::String = "Minimum_commitment_coal.csv")
+        filename::String = "Minimum_commitment.csv")
     raw_profiles = DataFrame[]
     expected_columns = nothing
     found_file = false
@@ -2012,11 +2012,9 @@ function cluster_inputs(inpath,
                     weights = PreserveAnnualCapacityFactors == 1 ? W : nothing,
                     v = v
                 )
-                for filename in ("Minimum_commitment_coal.csv", "Minimum_commitment_gas.csv")
-                    write_tdr_minimum_commitment_from_raw_multistage_concat(
-                        inpath, mysetup, NumStages, dirname(out_gvar_path), M,
-                        TimestepsPerRepPeriod; filename = filename)
-                end
+                write_tdr_minimum_commitment_from_raw_multistage_concat(
+                    inpath, mysetup, NumStages, dirname(out_gvar_path), M,
+                    TimestepsPerRepPeriod)
                 if mysetup["LinePowerFlowLimits"] == 1
                     write_tdr_line_power_flow_limits_from_raw_multistage_concat(
                         inpath,
@@ -2177,11 +2175,9 @@ function cluster_inputs(inpath,
                 weights = PreserveAnnualCapacityFactors == 1 ? W : nothing,
                 v = v
             )
-            for filename in ("Minimum_commitment_coal.csv", "Minimum_commitment_gas.csv")
-                write_tdr_minimum_commitment_from_raw(
-                    dirname(raw_gvar_path), dirname(out_gvar_path), M,
-                    TimestepsPerRepPeriod; filename = filename)
-            end
+            write_tdr_minimum_commitment_from_raw(
+                dirname(raw_gvar_path), dirname(out_gvar_path), M,
+                TimestepsPerRepPeriod)
             if mysetup["LinePowerFlowLimits"] == 1
                 write_tdr_line_power_flow_limits_from_raw(
                     dirname(raw_gvar_path),
@@ -2340,11 +2336,9 @@ function cluster_inputs(inpath,
             weights = PreserveAnnualCapacityFactors == 1 ? W : nothing,
             v = v
         )
-        for filename in ("Minimum_commitment_coal.csv", "Minimum_commitment_gas.csv")
-            write_tdr_minimum_commitment_from_raw(
-                dirname(raw_gvar_path), dirname(out_gvar_path), M,
-                TimestepsPerRepPeriod; filename = filename)
-        end
+        write_tdr_minimum_commitment_from_raw(
+            dirname(raw_gvar_path), dirname(out_gvar_path), M,
+            TimestepsPerRepPeriod)
         if mysetup["LinePowerFlowLimits"] == 1
             write_tdr_line_power_flow_limits_from_raw(
                 dirname(raw_gvar_path),
