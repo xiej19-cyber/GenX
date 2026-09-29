@@ -86,6 +86,10 @@ function write_reserve_margin_revenue_peakload(
                 for y in VRE_STOR]
         end
 
+        # Reconcile external dedicated-resource revenue with the flow-capped capacity
+        # contribution used by the peak-load CRM constraint.
+        rev .*= [peakload_external_delivery_fraction(EP, i, zones[y]) for y in 1:G]
+
         # accumulate
         rev .*= scale_factor
         annual_sum .+= rev

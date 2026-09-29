@@ -40,33 +40,95 @@ end
     end
 end
 
-@testset "transmission contribution uses final rated capacity" begin
+@testset "transmission contribution uses peak-hour flow" begin
     model = Model(HiGHS.Optimizer)
     set_silent(model)
-    @variable(model, reinforcement >= 0)
-    model[:eAvail_Trans_Cap] = [2.0 + reinforcement]
+    @variable(model, flow[1:1, 1:2])
+    model[:vFLOW] = flow
     model[:eCapResMarBalancePeak] = [AffExpr(0.0), AffExpr(0.0), AffExpr(0.0)]
 
     inputs = Dict(
         "L" => 1,
         "NCapacityReserveMargin" => 3,
+        "peak_hour_idx" => [2, 1, 2],
         "dfTransCapRes_exclPeak" => reshape([-1.0, 1.0, -1.0], 1, 3),
         "dfDerateTransCapResPeak" => reshape([0.95, 0.95, 0.0], 1, 3),
     )
 
     GenX.add_peakload_transmission_capacity_contribution!(model, inputs)
-    @constraint(model, reinforcement == 0.5)
-    @objective(model, Min, reinforcement)
+    @constraint(model, flow[1, 1] == 1.5)
+    @constraint(model, flow[1, 2] == 2.5)
+    @objective(model, Min, 0)
     optimize!(model)
 
-    # Existing 2.0 plus reinforcement 0.5, accredited at 0.95. GenX uses -1 for
-    # the receiving region, which is credited with the firm capacity transfer.
+    # The receiving region is credited with its peak-hour delivered flow.
     @test value(model[:eCapResMarBalancePeak][1]) ≈ 2.375
-    # GenX uses +1 for the sending region, from which the same transfer is deducted.
-    @test value(model[:eCapResMarBalancePeak][2]) ≈ -2.375
+    # A different CRM peak hour uses that hour's flow and deducts the export.
+    @test value(model[:eCapResMarBalancePeak][2]) ≈ -1.425
     # A zero external derating factor disables line credit without a code change.
     @test value(model[:eCapResMarBalancePeak][3]) ≈ 0.0
-    @test !haskey(JuMP.object_dictionary(model), :vFLOW)
+end
+
+@testset "external resource contribution is capped by peak-hour flow" begin
+    function solve_external_credit(capacity_value, flow_value)
+        model = Model(HiGHS.Optimizer)
+        set_silent(model)
+        @variable(model, capacity >= 0)
+        @variable(model, flow[1:1, 1:1] >= 0)
+        model[:eTotalCap] = [capacity]
+        model[:vFLOW] = flow
+        model[:eObj] = AffExpr(0.0)
+        model[:eCapResMarBalancePeak] = [AffExpr(0.0)]
+        add_to_expression!(model[:eCapResMarBalancePeak][1], capacity)
+
+        resource = GenX.Thermal(Dict{Symbol, Any}(
+            :resource => "External resource",
+            :zone => 2,
+            :region => "External region",
+            :cluster => 1,
+            :derating_factor_1 => 1.0,
+        ))
+        inputs = Dict(
+            "T" => 1,
+            "Z" => 2,
+            "L" => 1,
+            "G" => 1,
+            "NCapacityReserveMargin" => 1,
+            "peak_hour_idx" => [1],
+            "dfCapRes" => reshape([0.15, 0.0], 2, 1),
+            "dfTransCapRes_exclPeak" => reshape([-1.0], 1, 1),
+            "dfDerateTransCapResPeak" => reshape([0.0], 1, 1),
+            "pTrans_Start_Zone" => [2],
+            "pTrans_End_Zone" => [1],
+            "RESOURCES" => [resource],
+            "THERM_ALL" => [1],
+            "THERM_COMMIT" => Int[],
+            "VRE" => Int[],
+            "HYDRO_RES" => Int[],
+            "STOR_ALL" => Int[],
+            "FLEX" => Int[],
+            "MUST_RUN" => Int[],
+        )
+
+        GenX.add_peakload_external_resource_flow_limits!(model, inputs)
+        @constraint(model, capacity == capacity_value)
+        @constraint(model, flow[1, 1] == flow_value)
+        @objective(model, Max, model[:vPeakPairedCapCredit][(1, 2)])
+        optimize!(model)
+        return value(model[:vPeakPairedCapCredit][(1, 2)]),
+               value(model[:eCapResMarBalancePeak][1]),
+               GenX.peakload_external_delivery_fraction(model, 1, 2)
+    end
+
+    credit, balance, fraction = solve_external_credit(3.0, 2.0)
+    @test credit ≈ 2.0
+    @test balance ≈ 2.0
+    @test fraction ≈ 2 / 3
+
+    credit, balance, fraction = solve_external_credit(3.0, 4.0)
+    @test credit ≈ 3.0
+    @test balance ≈ 3.0
+    @test fraction ≈ 1.0
 end
 
 @testset "price, accredited capacity, and revenue reconcile" begin

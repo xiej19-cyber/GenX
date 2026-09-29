@@ -1,3 +1,16 @@
+"""Return the delivered share of an external source zone's accredited capacity."""
+function peakload_external_delivery_fraction(
+        EP::Model, capres_zone::Int, resource_zone::Int)::Float64
+    haskey(EP, :vPeakPairedCapCredit) || return 1.0
+    key = (capres_zone, resource_zone)
+    credits = EP[:vPeakPairedCapCredit]
+    haskey(credits, key) || return 1.0
+
+    raw_capacity = value(EP[:ePeakPairedRawCapacity][key])
+    raw_capacity > 0 || return 0.0
+    return clamp(value(credits[key]) / raw_capacity, 0.0, 1.0)
+end
+
 @doc raw"""
     thermal_plant_effective_capacity(EP::Model,
                                      inputs::Dict,

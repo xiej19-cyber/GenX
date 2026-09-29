@@ -82,6 +82,11 @@ function write_capacity_value_peakload(path::AbstractString, inputs::Dict, setup
                 vre_stor_effective_capacity_peakload(EP, y, i) for y in VRE_STOR_EX]
         end
 
+        # External dedicated resources are credited only up to their source zone's
+        # delivered peak-hour flow. Allocate the group credit proportionally so the
+        # resource-level output reconciles with the policy constraint.
+        capvalue .*= [peakload_external_delivery_fraction(EP, i, zones[y]) for y in 1:G]
+
         capvalue .*= scale_factor
 
         temp_dfCapValue = DataFrame(

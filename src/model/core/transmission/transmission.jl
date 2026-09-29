@@ -88,27 +88,28 @@ As with losses option 2, this segment-wise approximation of a quadratic loss fun
     add_peakload_transmission_capacity_contribution!(EP, inputs)
 
 Add accredited transmission capability to each peak-load CRM balance. A participating
-line contributes its final available transfer capacity (existing capacity plus any
-endogenous reinforcement), multiplied by its `DerateCapRes` factor. GenX defines
+line contributes its signed flow during the corresponding CRM peak hour, multiplied by
+its `DerateCapRes` factor. GenX defines
 `CapRes_Excl = 1` for the sending CRM region and `CapRes_Excl = -1` for the receiving
 CRM region. The leading minus sign therefore deducts firm exports from the sender and
-credits the same firm transfer to the receiver. Set `DerateCapRes` to zero when firm
-capacity transfers are not modeled.
+credits the same delivered transfer to the receiver. Set `DerateCapRes` to zero when
+dedicated generation is used to represent the transfer instead.
 
 Set a line's `DerateCapRes_r` to zero when that corridor's dedicated generation is
-credited directly to CRM region `r`; otherwise the line and its dedicated generators
-would both receive capacity credit.
+credited to CRM region `r`. The dedicated-generation contribution is then capped by
+that line's flow in the CRM peak hour.
 """
 function add_peakload_transmission_capacity_contribution!(EP::Model, inputs::Dict)
     L = inputs["L"]
     NCRM = inputs["NCapacityReserveMargin"]
+    peak_idx = inputs["peak_hour_idx"]
     participation = inputs["dfTransCapRes_exclPeak"]
     derating = inputs["dfDerateTransCapResPeak"]
 
     @expression(EP,
         eCapResMarBalancePeakTrans[res = 1:NCRM],
         sum(-participation[l, res] * derating[l, res] *
-            EP[:eAvail_Trans_Cap][l] for l in 1:L))
+            EP[:vFLOW][l, peak_idx[res]] for l in 1:L))
     for res in 1:NCRM
         add_to_expression!(
             EP[:eCapResMarBalancePeak][res],
