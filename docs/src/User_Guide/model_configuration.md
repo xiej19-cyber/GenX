@@ -85,6 +85,12 @@ The following tables summarize the model settings parameters and their default/p
 |MaxCapReq | Maximum system-wide technology capacity limit constraints.|
 || 1 = if one or more maximum technology capacity constraints are specified|
 || 0 = otherwise|
+|MaxGenHours | Maximum capacity-weighted average annual generation-hours constraints for tagged resource groups.|
+|| 1 = activate maximum generation-hours constraints|
+|| 0 = otherwise|
+|MinGenHours | Minimum capacity-weighted average annual generation-hours constraints for tagged resource groups.|
+|| 1 = activate minimum generation-hours constraints|
+|| 0 = otherwise|
 |HydrogenMinimumProduction | Hydrogen production requirements from electrolyzers.|
 |1 = Constraint is active.|
 ||0 = Constraint is not active.| 

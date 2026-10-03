@@ -40,6 +40,8 @@ GenX.minimum_utilizationrate!
 GenX.cap_reserve_margin_multihours!
 GenX.minimum_capacity_requirement_simple!
 GenX.maximum_capacity_requirement_simple!
+GenX.minimum_generation_hours!
+GenX.maximum_generation_hours!
 ```
 
 ## Hourly clean supply matching constraint

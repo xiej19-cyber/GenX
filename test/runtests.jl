@@ -16,6 +16,10 @@ end
     include("test_minimum_power_variability.jl")
 end
 
+@testset "Generation hours policies" begin
+    include("test_generation_hours.jl")
+end
+
 @testset "Line power flow limits" begin
     include("test_line_power_flow_limits.jl")
 end

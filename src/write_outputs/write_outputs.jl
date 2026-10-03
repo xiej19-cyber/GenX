@@ -635,6 +635,26 @@ function write_outputs(EP::Model, path::AbstractString, setup::Dict, inputs::Dic
             println("Time elapsed for writing simple minimum capacity requirement is")
             println(elapsed_time_min_cap_req_simple)
         end 
+
+        if setup["MaxGenHours"] == 1 && has_duals(EP) == 1 &&
+           output_settings_d["WriteMaxGenHours"]
+            elapsed_time_max_gen_hours = @elapsed write_maximum_generation_hours(path,
+                inputs,
+                setup,
+                EP)
+            println("Time elapsed for writing maximum generation hours is")
+            println(elapsed_time_max_gen_hours)
+        end
+
+        if setup["MinGenHours"] == 1 && has_duals(EP) == 1 &&
+           output_settings_d["WriteMinGenHours"]
+            elapsed_time_min_gen_hours = @elapsed write_minimum_generation_hours(path,
+                inputs,
+                setup,
+                EP)
+            println("Time elapsed for writing minimum generation hours is")
+            println(elapsed_time_min_gen_hours)
+        end
         
         if setup["HydrogenMinimumProduction"] == 1 && has_duals(EP)
             if output_settings_d["WriteHydrogenPrices"]

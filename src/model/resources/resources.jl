@@ -807,6 +807,14 @@ function min_cap_simple(r::AbstractResource)
     get(r, Symbol("mincapreqsp"), "Ulmt")
 end
 
+function max_gen_hours(r::AbstractResource)
+    string(get(r, :maxgenhours, "none"))
+end
+
+function min_gen_hours(r::AbstractResource)
+    string(get(r, :mingenhours, "none"))
+end
+
 # write_outputs
 region(r::AbstractResource) = r.region
 cluster(r::AbstractResource) = r.cluster

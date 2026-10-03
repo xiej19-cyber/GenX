@@ -327,6 +327,14 @@ function generate_model(setup::Dict, inputs::Dict, OPTIMIZER::MOI.OptimizerWithA
         minimum_capacity_requirement_simple!(EP, inputs, setup)
     end
 
+    if setup["MaxGenHours"] == 1
+        maximum_generation_hours!(EP, inputs)
+    end
+
+    if setup["MinGenHours"] == 1
+        minimum_generation_hours!(EP, inputs)
+    end
+
     # Hydrogen demand limits
     if setup["HydrogenMinimumProduction"] > 0
         hydrogen_demand!(EP, inputs, setup)

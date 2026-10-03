@@ -51,6 +51,8 @@ function default_settings()
         "NarrowVariability" => 0,
         "MaxCapReqSimple" => 0,
         "MinCapReqSimple" => 0,
+        "MaxGenHours" => 0,
+        "MinGenHours" => 0,
         "MinCFReq" => 0)
 end
 
@@ -147,6 +149,8 @@ function default_writeoutput()
         "WriteMaxCapReq" => true,
         "WriteMaxCapReqSimple" => true,
         "WriteMinCapReqSimple" => true,
+        "WriteMaxGenHours" => true,
+        "WriteMinGenHours" => true,
         "WriteMinCapReq" => true,
         "WriteMinCFPrices" => true,
         "WriteMinCFRevenue" => true,

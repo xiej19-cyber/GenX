@@ -92,6 +92,14 @@ function load_inputs(setup::Dict, path::AbstractString)
         load_simple_minimum_capacity_requirement!(policies_path, inputs, setup)
     end
 
+    if setup["MaxGenHours"] == 1
+        load_maximum_generation_hours!(policies_path, inputs, setup)
+    end
+
+    if setup["MinGenHours"] == 1
+        load_minimum_generation_hours!(policies_path, inputs, setup)
+    end
+
     if setup["EnergyShareRequirement"] == 1
         load_energy_share_requirement!(setup, policies_path, inputs)
     end

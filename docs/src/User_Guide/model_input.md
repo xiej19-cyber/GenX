@@ -218,6 +218,10 @@ Each file contains cost and performance parameters for various generators and ot
 ||1 = Technology is available for the MGA run.|
 ||0 = Technology is unavailable for the MGA run (e.g. storage technologies).|
 |Resource\_Type |For the MGA run, we categorize all the resources in a few resource types. We then find maximally different generation portfolio based on these resource types. For example, existing solar and new solar resources could be represented by a resource type names `Solar`. Categorization of resources into resource types is user dependent. |
+|**MaxGenHours = 1**||
+|MaxGenHours |Name of the maximum generation-hours constraint that includes this resource. Resources with the same name are constrained as one capacity-weighted group. Use `none`, or omit the column, to exclude a resource.|
+|**MinGenHours = 1**||
+|MinGenHours |Name of the minimum generation-hours constraint that includes this resource. Resources with the same name are constrained as one capacity-weighted group. Use `none`, or omit the column, to exclude a resource.|
 |**Maintenance data**|
 |MAINT|[0,1], toggles scheduled maintenance formulation.|
 |Maintenance\_Duration| (Positive integer, less than total length of simulation.) Duration of the maintenance period, in number of timesteps. Only used if `MAINT=1`.|
@@ -853,6 +857,49 @@ It is required if the `MaxCapReq` flag has a non-zero value in `genx_settings.ym
 
 
 Some of the columns specified in the input files in Section 2.2 and 2.1 are not used in the GenX model formulation. These columns are necessary for interpreting the model outputs and used in the output module of the GenX.
+
+### 2.6.1 Maximum and minimum generation-hours policies
+
+`Maximum_generation_hours.csv` is required when `MaxGenHours = 1`, and
+`Minimum_generation_hours.csv` is required when `MinGenHours = 1`. Resources are
+assigned to a constraint through the `MaxGenHours` or `MinGenHours` column in their
+resource input file. A value of `none` excludes the resource. Each resource may belong
+to at most one maximum and one minimum constraint, while any number of resources may
+share the same constraint name.
+
+For a tagged resource group ``p``, GenX applies the following constraints:
+
+```math
+\sum_{y \in \mathcal{G}_p}\sum_t \omega_t P_{y,t}
+\leq H_p^{max}\sum_{y \in \mathcal{G}_p} Cap_y,
+```
+
+```math
+\sum_{y \in \mathcal{G}_p}\sum_t \omega_t P_{y,t}
+\geq H_p^{min}\sum_{y \in \mathcal{G}_p} Cap_y.
+```
+
+Thus, the policy limits the average equivalent annual generation hours of the entire
+tagged group, not the hours of each resource separately. `Cap` is optimized total
+capacity after additions and retirements, and `omega` supplies the annual time weights
+for both full-resolution and time-domain-reduced cases.
+
+###### Structure of Maximum\_generation\_hours.csv
+
+|**Column Name** | **Description**|
+| :------------ | :-----------|
+|ConstraintDescription |Unique constraint name matching values in resource `MaxGenHours` columns.|
+|Max\_Hours |Maximum capacity-weighted average annual generation hours.|
+
+###### Structure of Minimum\_generation\_hours.csv
+
+|**Column Name** | **Description**|
+| :------------ | :-----------|
+|ConstraintDescription |Unique constraint name matching values in resource `MinGenHours` columns.|
+|Min\_Hours |Minimum capacity-weighted average annual generation hours.|
+
+Co-located `VreStorage` and `AllamCycleLOX` resources are not currently supported by
+these policies because they use technology-specific output variables.
 
 ### 2.7 Method\_of\_morris\_range.csv
 
