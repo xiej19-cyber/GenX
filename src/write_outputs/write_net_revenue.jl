@@ -344,7 +344,9 @@ function write_net_revenue(path::AbstractString,
     # Add capacity payment revenue to the dataframe
     monetary_scale_factor = setup["ParameterScale"] == 1 ? ModelScalingFactor^2 : 1
     dfNetRevenue.CapacityPaymentRevenue = zeros(nrow(dfNetRevenue))
-    if setup["CapacityPayment"] == 1 && has_duals(EP)
+    # Capacity payment is a primal model expression and remains available for
+    # integer solutions even when dual values are not.
+    if setup["CapacityPayment"] == 1
         dfNetRevenue.CapacityPaymentRevenue = value.(EP[:eCapPayment][1:G]) .* monetary_scale_factor
     end
 

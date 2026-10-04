@@ -1,0 +1,4 @@
+Resource,Derating_Factor_1
+battery_2h_candidate,0.3
+battery_4h_candidate,0.5
+ldes_100h_candidate,0.8

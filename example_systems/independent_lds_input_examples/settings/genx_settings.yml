@@ -1,0 +1,6 @@
+TimeDomainReduction: 0
+LDSAdditionalConstraints: 1
+CRM_peakload: 1
+CapacityReserveMargin: 0
+CRM_multihours: 0
+CapacityPayment: 1

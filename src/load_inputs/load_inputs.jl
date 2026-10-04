@@ -122,8 +122,15 @@ function load_inputs(setup::Dict, path::AbstractString)
     end
 
     # Read in mapping of modeled periods to representative periods
-    if is_period_map_necessary(inputs) && is_period_map_exist(setup, path)
-        load_period_map!(setup, path, inputs)
+    if is_period_map_necessary(inputs)
+        if is_period_map_exist(setup, path)
+            load_period_map!(setup, path, inputs)
+        elseif setup["TimeDomainReduction"] == 0
+            build_manual_representative_week_period_map!(inputs)
+        else
+            error("Long-duration resources with representative periods require Period_map.csv " *
+                  "from time-domain reduction, but the file was not found.")
+        end
     end
 
     # Virtual charge discharge cost
@@ -157,10 +164,20 @@ function is_period_map_necessary(inputs::Dict)
 end
 
 function is_period_map_exist(setup::Dict, path::AbstractString)
+    !isnothing(period_map_path(setup, path))
+end
+
+"""Return the Period map selected by the same precedence used by the loader."""
+function period_map_path(setup::Dict, path::AbstractString)
     filename = "Period_map.csv"
-    is_in_system_dir = isfile(joinpath(path, setup["SystemFolder"], filename))
-    is_in_TDR_dir = isfile(joinpath(path, setup["TimeDomainReductionFolder"], filename))
-    is_in_system_dir || is_in_TDR_dir
+    system_path = joinpath(path, setup["SystemFolder"], filename)
+    tdr_path = joinpath(path, setup["TimeDomainReductionFolder"], filename)
+    if setup["TimeDomainReduction"] == 1 && isfile(tdr_path)
+        return tdr_path
+    elseif isfile(system_path)
+        return system_path
+    end
+    return nothing
 end
 
 """

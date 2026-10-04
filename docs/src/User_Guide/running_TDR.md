@@ -48,12 +48,16 @@ In this example, the first week represents a total of `26*168 = 4368` hours over
 
 The time series data are written in single unbroken columns: in this example, the `Time_Index` ranges from 1 to 504.
 
-For problems involving Long Duration Storage, a file `Period_map.csv` is necessary to describe how these representative periods occur throughout the modeled year.
+For problems involving Long Duration Storage, GenX needs a chronological mapping that
+describes how representative periods occur throughout the modeled year. TDR runs write
+this mapping to `Period_map.csv`. A user-supplied `Period_map.csv` remains supported when
+`TimeDomainReduction: 0`, but it is not required for the manual four-week and twelve-week
+calendar conventions described below: GenX constructs that mapping internally.
 
 When inputs contain either four seasonal or twelve monthly manually selected
-168-hour representative weeks, full-year output reconstruction does not require
-a user-provided `Period_map.csv`. Set `TimeDomainReduction: 0` and
-`OutputFullTimeSeries: 1`. In this mode the TDR settings are ignored.
+168-hour representative weeks, independent long-duration storage and full-year output
+reconstruction do not require a user-provided `Period_map.csv`. Set
+`TimeDomainReduction: 0`; the TDR settings are ignored.
 
 Four input weeks are interpreted in this order:
 

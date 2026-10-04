@@ -1,0 +1,4 @@
+Resource,Zone,Model,LDS,New_Build,Can_Retire,Existing_Cap_MW,Existing_Cap_MWh,Max_Cap_MW,Max_Cap_MWh,Min_Cap_MW,Min_Cap_MWh,Inv_Cost_per_MWyr,Inv_Cost_per_MWhyr,Fixed_OM_Cost_per_MWyr,Fixed_OM_Cost_per_MWhyr,Var_OM_Cost_per_MWh,Var_OM_Cost_per_MWh_In,Self_Disch,Eff_Up,Eff_Down,Min_Duration,Max_Duration,Reg_Max,Rsv_Max,Reg_Cost,Rsv_Cost,region,cluster
+battery_2h_candidate,1,1,0,1,0,0,0,10000,20000,0,0,260822,0,50350,0,0,0,0,0.95,0.95,2,2,1,0,0,0,z1,1
+battery_4h_candidate,1,1,0,1,0,0,0,10000,40000,0,0,432325,0,83457.5,0,0,0,0,0.95,0.95,4,4,1,0,0,0,z1,1
+ldes_100h_candidate,1,1,1,1,0,0,0,10000,1000000,0,0,150000,2000,10000,0,1,1,0,0.85,0.85,100,100,0,0,0,0,z1,1

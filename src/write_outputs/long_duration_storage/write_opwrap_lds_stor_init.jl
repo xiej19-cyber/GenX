@@ -10,6 +10,11 @@ function write_opwrap_lds_stor_init(path::AbstractString,
 
     # Initial level of storage in each modeled period
     NPeriods = size(inputs["Period_Map"])[1]
+    period_map_used = copy(inputs["Period_Map"])
+    period_map_used[!, :Mapping_Source] =
+        fill(get(inputs, "Period_Map_Source", "input Period_map.csv"), NPeriods)
+    CSV.write(joinpath(path, "Period_map_used.csv"), period_map_used)
+
     dfStorageInit = DataFrame(Resource = inputs["RESOURCE_NAMES"], Zone = zones)
     socw = zeros(G, NPeriods)
     for i in 1:G
@@ -80,6 +85,6 @@ function write_opwrap_lds_stor_init(path::AbstractString,
     df_SOC_t = hcat(df_SOC_t, DataFrame(SOC_t, :auto))
     auxNew_Names = [Symbol("Resource"); Symbol("Zone"); [Symbol("n$t") for t in 1:T_hor]]
     rename!(df_SOC_t,auxNew_Names)
-    CSV.write(joinpath(path, "StorageEvol.csv"), dftranspose(df_SOC_t, false), writeheader=false)
+    CSV.write(joinpath(path, "StorageEvol.csv"), dftranspose(df_SOC_t, false), header = false)
 
 end

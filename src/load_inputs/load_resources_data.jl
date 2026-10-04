@@ -452,6 +452,17 @@ function check_LDS_applicability(r::AbstractResource)
     not_set = default_zero
     lds_value = get(r, :lds, not_set)
 
+    if lds_value ∉ (0, 1)
+        push!(error_strings,
+            "Resource $(resource_name(r)) has :lds = $lds_value. LDS must be either 0 or 1.\n")
+    end
+
+    if isa(r, Storage) && lds_value == 1 && r.model ∉ (1, 2)
+        push!(error_strings,
+            "Resource $(resource_name(r)) has LDS=1 but Model=$(r.model). " *
+            "Independent LDS requires storage Model=1 or Model=2.\n")
+    end
+
     # LDS is available only for Hydro and Storage
     if !isa(r, applicable_resources) && lds_value > 0
         e = string("Resource ", resource_name(r), " has :lds = ", lds_value, ".\n",

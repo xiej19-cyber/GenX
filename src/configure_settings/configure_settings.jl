@@ -95,6 +95,7 @@ function validate_settings!(settings::Dict{Any, Any})
     @assert settings["CapacityPayment"] ∈ [0, 1] "CapacityPayment must be 0 or 1"
     @assert settings["CRM_peakload"] ∈ [0, 1] "CRM_peakload must be 0 or 1"
     @assert settings["CRM_multihours"] ∈ [0, 1] "CRM_multihours must be 0 or 1"
+    @assert settings["LDSAdditionalConstraints"] ∈ [0, 1] "LDSAdditionalConstraints must be 0 or 1"
     active_crm_modes = count(>(0), [settings["CapacityReserveMargin"],
         settings["CRM_peakload"], settings["CRM_multihours"]])
     active_crm_modes <= 1 ||

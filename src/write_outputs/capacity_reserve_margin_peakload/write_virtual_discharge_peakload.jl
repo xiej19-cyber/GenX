@@ -17,7 +17,8 @@ function write_virtual_discharge_peakload(path::AbstractString, inputs::Dict, se
         peak_hour = inputs["peak_hour_idx"][res]
 
         vdis = [
-            derating_factor(gen[y], tag=res) * value(EP[:eTotalCap][y]) * scale_factor
+            derating_factor(gen[y], tag=res) * value(EP[:eTotalCap][y]) *
+            peakload_external_delivery_fraction(EP, res, zone_id(gen[y])) * scale_factor
             for y in STOR_ALL
         ]
 

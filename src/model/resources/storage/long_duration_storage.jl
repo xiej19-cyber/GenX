@@ -111,8 +111,11 @@ function long_duration_storage!(EP::Model, inputs::Dict, setup::Dict)
     NPeriods = size(inputs["Period_Map"])[1] # Number of modeled periods
 
     MODELED_PERIODS_INDEX = 1:NPeriods
-    REP_PERIODS_INDEX = MODELED_PERIODS_INDEX[dfPeriodMap[!, :Rep_Period] .== MODELED_PERIODS_INDEX]
-    NON_REP_PERIODS_INDEX = setdiff(MODELED_PERIODS_INDEX, REP_PERIODS_INDEX)
+    REPRESENTATIVE_ANCHORS = [
+        only(unique(dfPeriodMap[dfPeriodMap[!, :Rep_Period_Index] .== w, :Rep_Period]))
+        for w in 1:REP_PERIOD
+    ]
+    NON_REP_PERIODS_INDEX = setdiff(MODELED_PERIODS_INDEX, REPRESENTATIVE_ANCHORS)
 
     eTotalCapEnergy = EP[:eTotalCapEnergy]
     vCHARGE = EP[:vCHARGE]
@@ -182,10 +185,9 @@ function long_duration_storage!(EP::Model, inputs::Dict, setup::Dict)
     # Initial storage level for representative periods must also adhere to sub-period storage inventory balance
     # Initial storage = Final storage - change in storage inventory across representative period
     @constraint(EP,
-        cSoCBalLongDurationStorageSub[y in STOR_LONG_DURATION, r in REP_PERIODS_INDEX],
-        vSOCw[y,
-            r]==vS[y, hours_per_subperiod * dfPeriodMap[r, :Rep_Period_Index]] -
-                vdSOC[y, dfPeriodMap[r, :Rep_Period_Index]])
+        cSoCBalLongDurationStorageSub[y in STOR_LONG_DURATION, w in 1:REP_PERIOD],
+        vSOCw[y, REPRESENTATIVE_ANCHORS[w]] ==
+            vS[y, hours_per_subperiod * w] - vdSOC[y, w])
 
     # Capacity Reserve Margin policy
     if CapacityReserveMargin > 0
@@ -224,10 +226,10 @@ function long_duration_storage!(EP::Model, inputs::Dict, setup::Dict)
         # Initial reserve storage level for representative periods must also adhere to sub-period storage inventory balance
         # Initial storage = Final storage - change in storage inventory across representative period
         @constraint(EP,
-            cVSoCBalLongDurationStorageSub[y in STOR_LONG_DURATION, r in REP_PERIODS_INDEX],
-            vCAPRES_socw[y,r]==vCAPRES_socinreserve[y,
-                hours_per_subperiod * dfPeriodMap[r, :Rep_Period_Index]] -
-                    vCAPRES_dsoc[y, dfPeriodMap[r, :Rep_Period_Index]])
+            cVSoCBalLongDurationStorageSub[y in STOR_LONG_DURATION, w in 1:REP_PERIOD],
+            vCAPRES_socw[y, REPRESENTATIVE_ANCHORS[w]] ==
+                vCAPRES_socinreserve[y, hours_per_subperiod * w] -
+                vCAPRES_dsoc[y, w])
 
         # energy held in reserve at the beginning of each modeled period acts as a lower bound on the total energy held in storage
         @constraint(EP,

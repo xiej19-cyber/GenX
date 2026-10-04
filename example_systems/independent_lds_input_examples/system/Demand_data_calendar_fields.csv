@@ -1,0 +1,5 @@
+Rep_Periods,Timesteps_per_Rep_Period,Sub_Weights,Representative_Period
+4,168,2208,spring
+,,2208,summer
+,,2184,autumn
+,,2160,winter

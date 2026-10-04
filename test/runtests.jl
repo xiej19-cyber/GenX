@@ -28,6 +28,10 @@ end
     include("test_capacity_payment.jl")
 end
 
+@testset "Independent long-duration storage" begin
+    include("test_long_duration_storage.jl")
+end
+
 @testset "Peak-load capacity reserve margin" begin
     include("test_peakload_capacity_reserve_margin.jl")
 end
