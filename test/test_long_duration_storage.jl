@@ -22,6 +22,8 @@ end
     for (representative_periods, weights) in (
         (4, [2208.0, 2208.0, 2184.0, 2160.0]),
         (12, Float64.([31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] .* 24)),
+        (4, fill(2184.0, 4)),
+        (12, Float64.([31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 30] .* 24)),
     )
         inputs = Dict{String, Any}(
             "REP_PERIOD" => representative_periods,
@@ -33,6 +35,7 @@ end
         @test nrow(period_map) == 52
         @test period_map.Period_Index == 1:52
         @test Set(period_map.Rep_Period_Index) == Set(1:representative_periods)
+        @test sum(weights) in (8736.0, 8760.0)
         @test inputs["Period_Map_Source"] ==
               "automatic manual representative-week calendar"
     end

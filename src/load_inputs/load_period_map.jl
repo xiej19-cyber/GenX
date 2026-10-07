@@ -69,9 +69,11 @@ order. This is deliberately independent of the `TimeDomainReduction` setting.
 
 For four seasonal weeks, the 52 complete seven-day periods are divided into the same
 four 13-week seasons used by the manual seasonal workflow. For twelve monthly weeks,
-each complete week is assigned according to its midpoint month. The final 24 hours
-are accounted for by the representative-period weights but do not form a separate
-chronological period in this weekly LDS mapping.
+each complete week is assigned according to its midpoint month. Both common annual
+weighting conventions are supported: 8736 hours (exactly 52 weeks), and 8760 hours
+(52 complete weeks plus 24 hours accounted for by the representative-period weights).
+The extra 24 hours in the latter convention do not form a separate chronological
+period in this weekly LDS mapping.
 """
 function build_manual_representative_week_period_map!(inputs::Dict)
     n_representative_periods = inputs["REP_PERIOD"]
@@ -85,21 +87,30 @@ function build_manual_representative_week_period_map!(inputs::Dict)
     weights = Float64.(inputs["Weights"])
     length(weights) == n_representative_periods || error(
         "Expected one Sub_Weights value for each representative week.")
-    isapprox(sum(weights), 8760.0; atol = 1e-6) || error(
-        "Automatic calendar mapping for manual representative weeks requires " *
-        "Sub_Weights to sum to 8760 hours; found $(sum(weights)).")
-    expected_weights = if n_representative_periods == 4
+    calendar_year_weights = if n_representative_periods == 4
         Float64.([92, 92, 91, 90] .* 24)
     else
         Float64.([31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] .* 24)
     end
-    all(isapprox.(weights, expected_weights; atol = 1e-6)) || error(
-        "Automatic calendar mapping expected Sub_Weights $(expected_weights) for " *
-        "$n_representative_periods manual representative weeks, but found $weights. " *
+    complete_week_weights = if n_representative_periods == 4
+        fill(13.0 * hours_per_period, 4)
+    else
+        # The manual monthly workflow retains calendar-month weights and removes
+        # the unmodeled 365th day from December for an exact 52-week year.
+        result = copy(calendar_year_weights)
+        result[end] -= 24.0
+        result
+    end
+    accepted_weights = (calendar_year_weights, complete_week_weights)
+    any(expected -> all(isapprox.(weights, expected; atol = 1e-6)),
+        accepted_weights) || error(
+        "Automatic calendar mapping expected one of the supported Sub_Weights " *
+        "conventions $(collect(accepted_weights)) for $n_representative_periods " *
+        "manual representative weeks, but found $weights (sum=$(sum(weights))). " *
         "Use an explicit system/Period_map.csv for another weighting convention.")
 
     year_start = DateTime(2021, 1, 1) # fixed non-leap reference calendar
-    n_periods = div(8760, hours_per_period)
+    n_periods = 52
     representative_index = if n_representative_periods == 4
         # Match the established manual/TDR seasonal convention: 13 complete
         # weeks per season, ordered spring, summer, autumn, winter.
