@@ -121,4 +121,19 @@ function co2_cap!(EP::Model, inputs::Dict, setup::Dict)
                 EP[:eGenerationByZone][z, t]
             for t in 1:T, z in findall(x -> x == 1, inputs["dfCO2CapZones"][:, cap])))
     end
+
+    if haskey(inputs, "dfMaxCO2Capture")
+        isempty(inputs["CCS"]) &&
+            error("CO_2_Capture_Max_Mtons is configured, but no CCS resources were loaded.")
+
+        gen = inputs["RESOURCES"]
+        capture_resources = [begin
+                zones = findall(==(1), inputs["dfCO2CapZones"][:, cap])
+                [y for y in inputs["CCS"] if zone_id(gen[y]) in zones]
+            end for cap in 1:inputs["NCO2Cap"]]
+        @constraint(EP, cCO2Capture_systemwide[cap = 1:inputs["NCO2Cap"]],
+            sum(EP[:eEmissionsCaptureByPlantYear][y] for y in capture_resources[cap]) <=
+            sum(inputs["dfMaxCO2Capture"][z, cap]
+                for z in findall(==(1), inputs["dfCO2CapZones"][:, cap])))
+    end
 end
