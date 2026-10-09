@@ -28,6 +28,10 @@ end
     include("test_capacity_payment.jl")
 end
 
+@testset "CO2 capture cap" begin
+    include("test_ccus_capture_cap.jl")
+end
+
 @testset "Independent long-duration storage" begin
     include("test_long_duration_storage.jl")
 end
