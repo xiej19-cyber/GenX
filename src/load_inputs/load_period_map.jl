@@ -92,16 +92,18 @@ function build_manual_representative_week_period_map!(inputs::Dict)
     else
         Float64.([31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] .* 24)
     end
-    complete_week_weights = if n_representative_periods == 4
-        fill(13.0 * hours_per_period, 4)
+    # Some manual workflows preserve calendar season/month weights and remove the
+    # unmodeled 365th day from the final (winter/December) representative period.
+    truncated_calendar_weights = copy(calendar_year_weights)
+    truncated_calendar_weights[end] -= 24.0
+    accepted_weights = if n_representative_periods == 4
+        # Also retain the alternative exact-52-week convention in which every
+        # seasonal representative week occurs exactly thirteen times.
+        exact_week_weights = fill(13.0 * hours_per_period, 4)
+        (calendar_year_weights, truncated_calendar_weights, exact_week_weights)
     else
-        # The manual monthly workflow retains calendar-month weights and removes
-        # the unmodeled 365th day from December for an exact 52-week year.
-        result = copy(calendar_year_weights)
-        result[end] -= 24.0
-        result
+        (calendar_year_weights, truncated_calendar_weights)
     end
-    accepted_weights = (calendar_year_weights, complete_week_weights)
     any(expected -> all(isapprox.(weights, expected; atol = 1e-6)),
         accepted_weights) || error(
         "Automatic calendar mapping expected one of the supported Sub_Weights " *
