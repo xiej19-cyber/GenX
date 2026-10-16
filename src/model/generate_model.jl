@@ -254,6 +254,10 @@ function generate_model(setup::Dict, inputs::Dict, OPTIMIZER::MOI.OptimizerWithA
     end
     # Policies
 
+    if setup["CapacityMix"] == 1
+        capacity_mix!(EP, inputs)
+    end
+
     if setup["OperationalReserves"] > 0
         operational_reserves_constraints!(EP, inputs, setup)
     end

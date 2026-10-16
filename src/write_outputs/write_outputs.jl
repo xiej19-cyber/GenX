@@ -73,6 +73,10 @@ function write_outputs(EP::Model, path::AbstractString, setup::Dict, inputs::Dic
         println(elapsed_time_capacity)
     end
 
+    if setup["CapacityMix"] == 1 && output_settings_d["WriteCapacityMix"]
+        write_capacity_mix(path, inputs, setup, EP)
+    end
+
     if output_settings_d["WritePower"] || output_settings_d["WriteNetRevenue"]
         elapsed_time_power = @elapsed dfPower = write_power(path, inputs, setup, EP)
         println("Time elapsed for writing power is")

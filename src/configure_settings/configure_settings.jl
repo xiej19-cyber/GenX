@@ -53,6 +53,7 @@ function default_settings()
         "MinCapReqSimple" => 0,
         "MaxGenHours" => 0,
         "MinGenHours" => 0,
+        "CapacityMix" => 0,
         "MinCFReq" => 0)
 end
 
@@ -96,6 +97,7 @@ function validate_settings!(settings::Dict{Any, Any})
     @assert settings["CRM_peakload"] ∈ [0, 1] "CRM_peakload must be 0 or 1"
     @assert settings["CRM_multihours"] ∈ [0, 1] "CRM_multihours must be 0 or 1"
     @assert settings["LDSAdditionalConstraints"] ∈ [0, 1] "LDSAdditionalConstraints must be 0 or 1"
+    @assert settings["CapacityMix"] ∈ [0, 1] "CapacityMix must be 0 or 1"
     active_crm_modes = count(>(0), [settings["CapacityReserveMargin"],
         settings["CRM_peakload"], settings["CRM_multihours"]])
     active_crm_modes <= 1 ||
@@ -152,6 +154,7 @@ function default_writeoutput()
         "WriteMinCapReqSimple" => true,
         "WriteMaxGenHours" => true,
         "WriteMinGenHours" => true,
+        "WriteCapacityMix" => true,
         "WriteMinCapReq" => true,
         "WriteMinCFPrices" => true,
         "WriteMinCFRevenue" => true,

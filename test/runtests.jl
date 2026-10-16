@@ -20,6 +20,10 @@ end
     include("test_generation_hours.jl")
 end
 
+@testset "Capacity mix policy" begin
+    include("test_capacity_mix.jl")
+end
+
 @testset "Line power flow limits" begin
     include("test_line_power_flow_limits.jl")
 end

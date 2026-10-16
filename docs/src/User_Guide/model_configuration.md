@@ -91,6 +91,8 @@ The following tables summarize the model settings parameters and their default/p
 |MinGenHours | Minimum capacity-weighted average annual generation-hours constraints for tagged resource groups.|
 || 1 = activate minimum generation-hours constraints|
 || 0 = otherwise|
+|CapacityMix | Exact end-of-stage power-capacity shares among user-defined resource types within each group.|
+|| 1 = activate the capacity mix constraints; 0 = otherwise (default)|
 |HydrogenMinimumProduction | Hydrogen production requirements from electrolyzers.|
 |1 = Constraint is active.|
 ||0 = Constraint is not active.| 
