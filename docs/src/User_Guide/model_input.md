@@ -901,6 +901,38 @@ for both full-resolution and time-domain-reduced cases.
 Co-located `VreStorage` and `AllamCycleLOX` resources are not currently supported by
 these policies because they use technology-specific output variables.
 
+### 2.6.2 Capacity mix policy
+
+Set `CapacityMix: 1` in `genx_settings.yml` and provide two CSV files. The first,
+`policies/Capacity_mix.csv`, contains exactly `Group,Resource_Type,Share`. Each row
+sets one type's fraction of the group's final installed generation or discharge
+power capacity. Enter fractions from 0 to 1; shares must sum to 1 within each
+group. For example, `Portfolio,Wind,0.6` and `Portfolio,4h storage,0.4` specify
+a 60/40 capacity mix.
+
+The second file, `resources/policy_assignments/Resource_capacity_mix.csv`,
+contains exactly `Resource,Group,Resource_Type`. `Resource` must match a resource
+name in the input files. A resource may appear in multiple groups but only once
+within each group. The `Resource_Type` labels are user-defined: two independent
+storage resources can be assigned to separate types such as `4h storage` and
+`Compressed air`. Every target group/type pair needs an assigned resource.
+
+For each type ``k`` in group ``g``, the policy sets the sum of its resources'
+final power capacity equal to `Share` times the group's total final power
+capacity. Capacity includes existing capacity, additions, and retirements. For
+storage this is discharge power (MW), not energy (MWh) or charging power.
+The entire group may have zero capacity; use a minimum-capacity policy separately
+if the group must build. The mix is exact, so existing capacity or other policies
+can make a case infeasible. Ordinary `Vre`, `Thermal`, independent `Storage`, and
+`Hydro` resources whose names contain `_csp_` are supported. Other hydro,
+co-located, and component-based resources are rejected. Each multi-stage period
+uses its own two files under `inputs_pN` and enforces its own end-of-stage mix.
+
+When enabled, `Capacity_mix_results.csv` reports target and realized shares,
+type and group capacity in MW, and the share gap. Realized shares are blank for
+zero-capacity groups. Set `WriteCapacityMix: false` in `output_settings.yml` to
+disable this result file.
+
 ### 2.7 Method\_of\_morris\_range.csv
 
 This file contains the settings parameters required to run the Method of Morris algorithm in GenX. This file is needed if the `MethodofMorris` flag is ON in the YAML file `genx_settings.yml`.

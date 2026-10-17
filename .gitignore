@@ -42,3 +42,11 @@ Cases-2026-08-04/
 outputs/
 
 各类电源年化成本参数-全国.xlsx
+
+fixed_curves/
+fixed_ratio_megabase.xlsx
+
+generate_capacity_mix_megabase.py
+
+test/test_capacity_mix.jl
+test/test_generate_capacity_mix_megabase.py

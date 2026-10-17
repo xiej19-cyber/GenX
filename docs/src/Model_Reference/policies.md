@@ -42,6 +42,7 @@ GenX.minimum_capacity_requirement_simple!
 GenX.maximum_capacity_requirement_simple!
 GenX.minimum_generation_hours!
 GenX.maximum_generation_hours!
+GenX.capacity_mix!
 ```
 
 ## Hourly clean supply matching constraint
