@@ -59,7 +59,9 @@ function load_capacity_mix!(setup::Dict, case_path::AbstractString, inputs::Dict
         length(matches) == 1 ||
             error("Resource $name in Resource_capacity_mix.csv must match exactly one resource.")
         id = only(matches)
-        resources[id] isa Union{Vre, Thermal, Storage} ||
+        supported = resources[id] isa Union{Vre, Thermal, Storage} ||
+            (resources[id] isa Hydro && occursin("_csp_", lowercase(name)))
+        supported ||
             error("Capacity mix does not support resource $name of type $(typeof(resources[id])).")
         resource_ids[row] = id
     end

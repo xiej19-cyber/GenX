@@ -22,6 +22,31 @@ function write_capacity_mix_inputs(path; shares = [0.6, 0.4, 0.6, 0.4],
         assignments)
 end
 
+@testset "Capacity mix permits CSP but rejects ordinary hydro" begin
+    mktempdir() do path
+        resources = [
+            capacity_mix_resource(GenX.Hydro, "XJ2wu_csp_candidate", 1),
+            capacity_mix_resource(GenX.Storage, "Battery", 2),
+            capacity_mix_resource(GenX.Thermal, "Gas", 3),
+        ]
+        setup = GenX.default_settings()
+        setup["CapacityMix"] = 1
+        write_capacity_mix_inputs(path; assignments = DataFrame(
+            Resource = ["XJ2wu_csp_candidate", "Battery", "XJ2wu_csp_candidate", "Gas"],
+            Group = ["Portfolio", "Portfolio", "Second", "Second"],
+            Resource_Type = ["Wind", "4h storage", "Wind", "Gas"]))
+        GenX.load_capacity_mix!(setup, path,
+            Dict{String, Any}("RESOURCES" => resources))
+        resources[1] = capacity_mix_resource(GenX.Hydro, "XJ2wu_hydro_candidate", 1)
+        write_capacity_mix_inputs(path; assignments = DataFrame(
+            Resource = ["XJ2wu_hydro_candidate", "Battery", "XJ2wu_hydro_candidate", "Gas"],
+            Group = ["Portfolio", "Portfolio", "Second", "Second"],
+            Resource_Type = ["Wind", "4h storage", "Wind", "Gas"]))
+        @test_throws ErrorException GenX.load_capacity_mix!(setup, path,
+            Dict{String, Any}("RESOURCES" => resources))
+    end
+end
+
 @testset "Capacity mix loading, modeling, and results" begin
     mktempdir() do path
         write_capacity_mix_inputs(path)

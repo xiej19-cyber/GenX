@@ -923,10 +923,10 @@ capacity. Capacity includes existing capacity, additions, and retirements. For
 storage this is discharge power (MW), not energy (MWh) or charging power.
 The entire group may have zero capacity; use a minimum-capacity policy separately
 if the group must build. The mix is exact, so existing capacity or other policies
-can make a case infeasible. Only ordinary `Vre`, `Thermal`, and independent
-`Storage` resources are supported; co-located and component-based resources
-are rejected. Each multi-stage period uses its own two files under `inputs_pN`
-and enforces its own end-of-stage mix.
+can make a case infeasible. Ordinary `Vre`, `Thermal`, independent `Storage`, and
+`Hydro` resources whose names contain `_csp_` are supported. Other hydro,
+co-located, and component-based resources are rejected. Each multi-stage period
+uses its own two files under `inputs_pN` and enforces its own end-of-stage mix.
 
 When enabled, `Capacity_mix_results.csv` reports target and realized shares,
 type and group capacity in MW, and the share gap. Realized shares are blank for
