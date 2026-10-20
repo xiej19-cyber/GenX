@@ -99,6 +99,7 @@ end
 
     @testset "Retrofit" begin
         include("test_retrofit.jl")
+        include("test_retrofit_decoupling.jl")
     end
 end
 
