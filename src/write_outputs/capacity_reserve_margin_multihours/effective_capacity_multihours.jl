@@ -47,3 +47,13 @@ function capacity_reserve_margin_price_multihours(
     return max(0.0, dual(EP[:cCapacityResMarginMultihour][capres_zone, t])) *
            scale_factor
 end
+
+"""Allocate the external zone's delivered credit proportionally, as in peakload."""
+function multihours_external_delivery_fraction(EP::Model, res::Int, z::Int, t::Int)::Float64
+    haskey(EP, :vMultiPairedCapCredit) || return 1.0
+    key = (res, z, t)
+    haskey(EP[:vMultiPairedCapCredit], key) || return 1.0
+    raw = value(EP[:eMultiPairedRawCapacity][key])
+    raw > 0 || return 0.0
+    return clamp(value(EP[:vMultiPairedCapCredit][key]) / raw, 0.0, 1.0)
+end

@@ -76,8 +76,12 @@ Read input parameters related to participation of transmission imports/exports i
 """
 function load_cap_reserve_margin_multihours_trans!(setup::Dict, inputs::Dict, network_var::DataFrame)
     mat = extract_matrix_from_dataframe(network_var, "DerateCapRes")
+    all(x -> x isa Real && isfinite(x) && 0 <= x <= 1, mat) ||
+        error("Network DerateCapRes values for CRM_multihours must be finite values between 0 and 1.")
     inputs["dfDerateTransCapResMulti"] = mat
 
     mat = extract_matrix_from_dataframe(network_var, "CapRes_Excl")
+    all(x -> x isa Real && isfinite(x) && abs(x) <= 1, mat) ||
+        error("Network CapRes_Excl values for CRM_multihours must be finite values between -1 and 1.")
     inputs["dfTransCapResMulti_excl"] = mat
 end

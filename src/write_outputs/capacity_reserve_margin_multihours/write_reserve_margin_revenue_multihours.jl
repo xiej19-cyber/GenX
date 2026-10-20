@@ -35,7 +35,8 @@ function write_reserve_margin_revenue_multihours(path::AbstractString, inputs::D
                 else
                     cap = 0.0
                 end
-                revenue[y] += cap * price * scale_factor
+                revenue[y] += cap * multihours_external_delivery_fraction(
+                    EP, res, zone_id(gen[y]), t) * price * scale_factor
             end
         end
 

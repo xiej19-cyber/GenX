@@ -47,6 +47,10 @@ function write_capacity_value_multihours(path::AbstractString, inputs::Dict, set
                     capvalue[y, col_idx] =
                         vre_stor_effective_capacity_multihours(EP, y, res, t)
                 end
+                for y in 1:G
+                    capvalue[y, col_idx] *= multihours_external_delivery_fraction(
+                        EP, res, zones[y], t)
+                end
             end
         end
 

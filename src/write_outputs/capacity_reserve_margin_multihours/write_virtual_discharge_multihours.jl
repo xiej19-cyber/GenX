@@ -9,12 +9,15 @@ function write_virtual_discharge_multihours(path::AbstractString, inputs::Dict, 
     df = DataFrame(Resource = resources, Zone = zones)
 
     for res in 1:NCRM
-        virt = [
-            derating_factor(gen[y], tag=res) * value(EP[:eTotalCap][y]) * scale_factor
-            for y in STOR_ALL
-        ]
-
-        df[!, Symbol("CapResMulti_$res")] = virt
+        hours = inputs["selected_capres_multihours"][res]
+        for t in hours
+            virt = [derating_factor(gen[y], tag=res) * value(EP[:eTotalCap][y]) *
+                    multihours_external_delivery_fraction(EP, res, zone_id(gen[y]), t) *
+                    scale_factor for y in STOR_ALL]
+            column = length(hours) == 1 ? Symbol("CapResMulti_$res") :
+                     Symbol("CapResMulti_$(res)_t$(t)")
+            df[!, column] = virt
+        end
     end
 
     CSV.write(joinpath(path, "virtual_discharge_multihours.csv"), df)

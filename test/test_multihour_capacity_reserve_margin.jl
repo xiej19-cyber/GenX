@@ -3,6 +3,55 @@ using DataFrames
 using HiGHS
 using JuMP
 
+@testset "external dedicated capacity is deliverable in selected hours" begin
+    for (line_derating, sign, flows, expected) in (
+            (0.0, -1.0, [2.0, 4.0], [2.0, 3.0]),
+            (0.0, 1.0, [-2.0, -4.0], [2.0, 3.0]),
+            (0.95, -1.0, [2.0, 4.0], [0.0, 0.0]),
+            (0.0, 0.0, [2.0, 4.0], [0.0, 0.0]))
+        model = Model(HiGHS.Optimizer)
+        set_silent(model)
+        @variable(model, capacity >= 0)
+        @variable(model, flow[1:1, 1:2])
+        model[:eTotalCap] = [capacity]
+        model[:vFLOW] = flow
+        model[:eCapResMarBalanceMultihour] = [AffExpr(0.0) AffExpr(0.0)]
+        for t in 1:2
+            add_to_expression!(model[:eCapResMarBalanceMultihour][1,t], capacity)
+            fix(flow[1,t], flows[t])
+        end
+        fix(capacity, 3.0; force=true)
+        resource = GenX.Thermal(Dict{Symbol,Any}(:resource => "Dedicated",
+            :zone => 2, :region => "Base", :cluster => 1, :derating_factor_1 => 1.0))
+        inputs = Dict{String,Any}("Z" => 2, "L" => 1,
+            "NCapacityReserveMargin" => 1,
+            "selected_capres_multihours" => Dict(1 => [1,2]),
+            "dfCapRes" => reshape([0.1,0.0],2,1),
+            "dfTransCapResMulti_excl" => reshape([sign],1,1),
+            "dfDerateTransCapResMulti" => reshape([line_derating],1,1),
+            "pTrans_Start_Zone" => [2], "pTrans_End_Zone" => [1],
+            "RESOURCES" => [resource], "THERM_ALL" => [1], "THERM_COMMIT" => Int[])
+        GenX.add_multihours_external_resource_flow_limits!(model, inputs)
+        @objective(model, Max, sum(model[:eCapResMarBalanceMultihour]))
+        optimize!(model)
+        @test termination_status(model) == MOI.OPTIMAL
+        @test [value(model[:eCapResMarBalanceMultihour][1,t]) for t in 1:2] ≈ expected
+        @test [GenX.multihours_external_delivery_fraction(model,1,2,t) for t in 1:2] ≈ expected ./ 3
+
+        # Reporting must use the same flow-capped contribution as the constraint.
+        merge!(inputs, Dict("G" => 1, "REP_PERIOD" => 1, "RESOURCE_NAMES" => ["Dedicated"],
+            "VRE" => Int[], "HYDRO_RES" => Int[], "STOR_ALL" => Int[],
+            "FLEX" => Int[], "MUST_RUN" => Int[], "VRE_STOR" => Int[]))
+        mktempdir() do path
+            settings = GenX.default_settings()
+            settings["ParameterScale"] = 0
+            GenX.write_capacity_value_multihours(path,inputs,settings,model)
+            output = CSV.read(joinpath(path,"CapacityValue_multihours.csv"),DataFrame)
+            @test [only(output.t1),only(output.t2)] ≈ expected
+        end
+    end
+end
+
 function multihour_test_resource()
     return GenX.Thermal(Dict{Symbol, Any}(
         :resource => "Multihour resource",
