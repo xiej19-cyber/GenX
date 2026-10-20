@@ -540,16 +540,17 @@ function check_fusion_applicability(setup::Dict, r::AbstractResource)
     return ErrorMsg.(error_strings)
 end
 
-function check_retrofit_resource(r::AbstractResource)
+function check_retrofit_resource(setup::Dict, r::AbstractResource)
     error_strings = String[]
 
-    # check that retrofit_id is set only for retrofitting units and not for new builds or units that can retire
-    if can_retrofit(r) == true && can_retire(r) == false
+    if can_retrofit(r) && !can_retire(r) &&
+            !(isa(r, Thermal) && setup["MultiStage"] == 0)
         e = string("Resource ", resource_name(r), " has :can_retrofit = ", can_retrofit(r),
             " but :can_retire = ", can_retire(r), ".\n",
-            "A unit that can be retrofitted must also be eligible for retirement (:can_retire = 1)")
+            "This combination is supported only for single-stage Thermal resources.")
         push!(error_strings, e)
-    elseif is_retrofit_option(r) == true && new_build(r) == false
+    end
+    if is_retrofit_option(r) == true && new_build(r) == false
         e = string("Resource ", resource_name(r), " has :retrofit = ",
             is_retrofit_option(r), " but :new_build = ", new_build(r), ".\n",
             "This setting is valid only for resources that have :new_build = 1")
@@ -614,7 +615,7 @@ function check_resource(setup::Dict, r::AbstractResource)
     e = [e; check_maintenance_applicability(r)]
     e = [e; check_fusion_applicability(setup, r)]
     e = [e; check_mustrun_reserve_contribution(r)]
-    e = [e; check_retrofit_resource(r)]
+    e = [e; check_retrofit_resource(setup, r)]
     e = [e; check_qualified_hydrogen_supply(r)]
     e = [e; check_hydrogen_resources(r)]
     e = [e; check_allam_cycle_lox_multistage(setup, r)]
@@ -1273,7 +1274,7 @@ function add_resources_to_input_data!(inputs::Dict,
     inputs["NEW_CAP"] = intersect(buildable, ids_with(gen, max_cap_mw))
     # Set of all resources eligible for capacity retirements
     inputs["RET_CAP"] = intersect(retirable, ids_with_nonneg(gen, existing_cap_mw))
-    # Set of all resources eligible for capacity retrofitting (by Yifu, same with retirement)
+    # Set of all resources eligible for capacity retrofitting
     inputs["RETROFIT_CAP"] = intersect(units_can_retrofit,
         ids_with_nonneg(gen, existing_cap_mw))
     inputs["RETROFIT_OPTIONS"] = ids_retrofit_options(gen)

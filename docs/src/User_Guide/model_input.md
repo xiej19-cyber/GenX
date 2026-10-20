@@ -209,6 +209,8 @@ Each file contains cost and performance parameters for various generators and ot
 |Retrofit\_Id | Unique identifier to group retrofittable source technologies with retrofit options inside the same zone.|
 |Retrofit\_Efficiency | [0,1], Efficiency of the retrofit technology.|
 
+For single-stage Thermal resources, `Can_Retire` and `Can_Retrofit` are independent. Setting `Can_Retire = 0` and `Can_Retrofit = 1` allows existing capacity to be converted to a matching retrofit option while prohibiting direct retirement. The converted capacity is removed from the original resource, and the retrofit option must have `Retrofit = 1`, `New_Build = 1`, and a matching `Retrofit_Id`. Other resource types and multi-stage models still require `Can_Retire = 1` when `Can_Retrofit = 1`.
+
 ##### Table 5b: Settings-specific columns in all resource .csv file
 ---
 |**Column Name** | **Description**|
