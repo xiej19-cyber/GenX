@@ -64,6 +64,57 @@ function load_capacity_payment!(setup::Dict, case_path::AbstractString, inputs::
     inputs["NCapacityPaymentRegions"] = N
     inputs["capacity_payment_price"] = Float64.(prices) ./ scale_factor
     inputs["CAPACITY_PAYMENT_DERATING_FACTOR"] = factors
+    load_capacity_payment_delivery!(setup, case_path, inputs)
     println("Capacity payment prices and resource assignments Successfully Read!")
+    return nothing
+end
+
+"""Load CRM geography and one critical hour without enabling CRM quantity constraints."""
+function load_capacity_payment_delivery!(setup::Dict, case_path::AbstractString, inputs::Dict)
+    enabled = get(setup, "CapacityPaymentDeliverability", 1) == 1 && get(inputs, "Z", 1) > 1
+    inputs["capacity_payment_delivery_enabled"] = enabled
+    enabled || return nothing
+    reference = get(setup, "CapacityPaymentReference", "multihours")
+    reference in ("peakload", "multihours") || error("Invalid CapacityPaymentReference: $reference")
+    policy_path = joinpath(case_path, setup["PoliciesFolder"])
+    filename = "CRM_$(reference).csv"
+    path = joinpath(policy_path, filename)
+    isfile(path) || error("Capacity payment deliverability requires $path; set CapacityPaymentDeliverability=0 only to use legacy nameplate payments.")
+    mat = extract_matrix_from_dataframe(load_dataframe(path), "CapRes")
+    N = inputs["NCapacityPaymentRegions"]
+    size(mat) == (inputs["Z"], N) || error("$filename must have one row per zone and one CapRes column per payment region.")
+    all(x -> x isa Real && isfinite(x) && x >= 0, mat) || error("Invalid CapRes values in $filename.")
+    zones = [findall(!iszero, mat[:, r]) for r in 1:N]
+    all(z -> !isempty(z), zones) || error("Every payment region must contain a CRM zone.")
+    hours = zeros(Int, N)
+    if reference == "multihours"
+        path = joinpath(policy_path, "CRM_multihours_selected.csv")
+        isfile(path) || error("Capacity payment deliverability requires $path.")
+        selected = load_dataframe(path)
+        all(c -> c in propertynames(selected), [:CapRes, :t]) || error("Selected hours require CapRes and t columns.")
+        all(x -> x isa Real && isfinite(x) && isinteger(x) && 1 <= x <= N, selected.CapRes) || error("Invalid selected CRM identifiers.")
+        all(x -> x isa Real && isfinite(x) && isinteger(x) && 1 <= x <= inputs["T"], selected.t) || error("Invalid selected timesteps.")
+        for r in 1:N
+            ts = selected[selected.CapRes .== r, :t]
+            length(ts) == 1 || error("Capacity payment requires exactly one selected timestep per region; CapRes_$r has $(length(ts)).")
+            hours[r] = Int(only(ts))
+        end
+    else
+        for r in 1:N
+            hours[r] = argmax([sum(inputs["pD"][t,z] for z in zones[r]) for t in 1:inputs["T"]])
+        end
+    end
+    network = load_dataframe(joinpath(case_path, setup["SystemFolder"], "Network.csv"))
+    derating = extract_matrix_from_dataframe(network, "DerateCapRes")
+    participation = extract_matrix_from_dataframe(network, "CapRes_Excl")
+    for (values, name) in ((derating, "DerateCapRes"), (participation, "CapRes_Excl"))
+        size(values,1) >= inputs["L"] && size(values,2) == N || error("Network $name dimensions do not match payment regions/lines.")
+        all(x -> x isa Real && isfinite(x) && abs(x) <= 1, values) || error("Invalid Network $name values.")
+    end
+    all(x -> x >= 0, derating) || error("Network DerateCapRes values must be nonnegative.")
+    inputs["capacity_payment_crm_zones"] = zones
+    inputs["capacity_payment_critical_hours"] = hours
+    inputs["capacity_payment_line_derating"] = derating
+    inputs["capacity_payment_line_participation"] = participation
     return nothing
 end

@@ -336,7 +336,7 @@ function write_costs(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
         end
 
         if setup["CapacityPayment"] == 1
-            tempCapacityPayment = -sum(value.(EP[:eCapPayment][Y_ZONE]), init = 0.0)
+            tempCapacityPayment = -sum(capacity_payment_reported_revenue(EP, inputs)[Y_ZONE], init = 0.0)
             tempCTotal += tempCapacityPayment
         end
 

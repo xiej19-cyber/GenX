@@ -9,6 +9,8 @@ function default_settings()
         "CRM_peakload" => 0,
         "CRM_multihours" => 0,
         "CapacityPayment" => 0,
+        "CapacityPaymentDeliverability" => 1,
+        "CapacityPaymentReference" => "multihours",
         "CO2Cap" => 0,
         "StorageLosses" => 1,
         "LDSAdditionalConstraints" => 1,
@@ -94,6 +96,8 @@ function validate_settings!(settings::Dict{Any, Any})
     @assert settings["WriteOutputs"] ∈ ["annual", "full"]
     @assert settings["OperationalReserves"] ∈ [0, 1, 2] "OperationalReserves must be 0, 1, or 2"
     @assert settings["CapacityPayment"] ∈ [0, 1] "CapacityPayment must be 0 or 1"
+    @assert settings["CapacityPaymentDeliverability"] ∈ [0, 1] "CapacityPaymentDeliverability must be 0 or 1"
+    @assert settings["CapacityPaymentReference"] ∈ ["peakload", "multihours"] "CapacityPaymentReference must be peakload or multihours"
     @assert settings["CRM_peakload"] ∈ [0, 1] "CRM_peakload must be 0 or 1"
     @assert settings["CRM_multihours"] ∈ [0, 1] "CRM_multihours must be 0 or 1"
     @assert settings["LDSAdditionalConstraints"] ∈ [0, 1] "LDSAdditionalConstraints must be 0 or 1"

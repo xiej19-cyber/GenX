@@ -347,7 +347,7 @@ function write_net_revenue(path::AbstractString,
     # Capacity payment is a primal model expression and remains available for
     # integer solutions even when dual values are not.
     if setup["CapacityPayment"] == 1
-        dfNetRevenue.CapacityPaymentRevenue = value.(EP[:eCapPayment][1:G]) .* monetary_scale_factor
+        dfNetRevenue.CapacityPaymentRevenue = capacity_payment_reported_revenue(EP, inputs) .* monetary_scale_factor
     end
 
     _add_net_revenue_totals!(dfNetRevenue)

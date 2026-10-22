@@ -3,6 +3,109 @@ using DataFrames
 using HiGHS
 using JuMP
 
+@testset "payment critical-hour metadata and independent CRM namespace" begin
+    mktempdir() do case_path
+        mkpath(joinpath(case_path,"policies"))
+        mkpath(joinpath(case_path,"system"))
+        CSV.write(joinpath(case_path,"policies","CRM_multihours.csv"),
+            DataFrame(Zone=[1,2],CapRes_1=[0.15,0.0]))
+        CSV.write(joinpath(case_path,"policies","CRM_multihours_selected.csv"),
+            DataFrame(CapRes=[1],t=[2]))
+        CSV.write(joinpath(case_path,"policies","CRM_peakload.csv"),
+            DataFrame(Zone=[1,2],CapRes_1=[0.15,0.0]))
+        CSV.write(joinpath(case_path,"system","Network.csv"),
+            DataFrame(DerateCapRes_1=[0.0],CapRes_Excl_1=[-1.0]))
+        settings=GenX.default_settings()
+        inputs=Dict{String,Any}("Z"=>2,"L"=>1,"T"=>3,
+            "NCapacityPaymentRegions"=>1,"pD"=>[1.0 0.0;2.0 0.0;3.0 0.0],
+            "NCapacityReserveMargin"=>99)
+        GenX.load_capacity_payment_delivery!(settings,case_path,inputs)
+        @test inputs["capacity_payment_crm_zones"]==[[1]]
+        @test inputs["capacity_payment_critical_hours"]==[2]
+        @test inputs["NCapacityReserveMargin"]==99
+        settings["CapacityPaymentReference"]="peakload"
+        GenX.load_capacity_payment_delivery!(settings,case_path,inputs)
+        @test inputs["capacity_payment_critical_hours"]==[3]
+        settings["CapacityPaymentReference"]="multihours"
+        CSV.write(joinpath(case_path,"policies","CRM_multihours_selected.csv"),
+            DataFrame(CapRes=[1,1],t=[1,2]))
+        @test_throws ErrorException GenX.load_capacity_payment_delivery!(settings,case_path,inputs)
+        settings["CapacityPaymentDeliverability"]=0
+        GenX.load_capacity_payment_delivery!(settings,case_path,inputs)
+        @test !inputs["capacity_payment_delivery_enabled"]
+    end
+end
+
+@testset "external payment is capped and reporting reconciles" begin
+    for (sign,flow_value,line_derating,expected) in (
+            (-1.0,2.0,0.0,2.0), (1.0,-2.0,0.0,2.0),
+            (-1.0,9.0,0.0,4.0), (-1.0,0.0,0.0,0.0),
+            (-1.0,2.0,0.95,0.0))
+        settings=GenX.default_settings()
+        settings["ParameterScale"]=1
+        model=Model(HiGHS.Optimizer);set_silent(model)
+        @variable(model,capacity[1:3]>=0)
+        @variable(model,flow[1:1,1:2])
+        for (y,amount) in enumerate([3.0,1.0,2.0])
+            fix(capacity[y],amount;force=true)
+        end
+        fix(flow[1,1],100.0)
+        fix(flow[1,2],flow_value)
+        resources=[GenX.Thermal(Dict{Symbol,Any}(:resource=>"resource$y",
+            :zone=>y==3 ? 1 : 2,:region=>"test",:cluster=>1)) for y in 1:3]
+        model[:eTotalCap]=capacity;model[:vFLOW]=flow;model[:eObj]=AffExpr(0.0)
+        GenX.create_empty_expression!(model,:eCapPayment,3)
+        inputs=Dict{String,Any}("G"=>3,"Z"=>2,"L"=>1,"NEW_CAP"=>Int[],
+            "RESOURCES"=>resources,"R_ZONES"=>[2,2,1],
+            "NCapacityPaymentRegions"=>1,"capacity_payment_price"=>[0.05],
+            "CAPACITY_PAYMENT_DERATING_FACTOR"=>reshape([1.0,1.0,0.8],3,1),
+            "capacity_payment_delivery_enabled"=>true,
+            "capacity_payment_crm_zones"=>[[1]],"capacity_payment_critical_hours"=>[2],
+            "capacity_payment_line_derating"=>reshape([line_derating],1,1),
+            "capacity_payment_line_participation"=>reshape([sign],1,1),
+            "pTrans_Start_Zone"=>[2],"pTrans_End_Zone"=>[1])
+        GenX.capacity_payment!(model,inputs,settings)
+        @objective(model,Min,model[:eObj]);optimize!(model)
+        @test termination_status(model)==MOI.OPTIMAL
+        @test value(model[:eTotalCapPayment])≈0.05*(expected+1.6)
+        paid=GenX.capacity_payment_reported_capacity(model,inputs)
+        @test paid[:,1]≈[expected*0.75,expected*0.25,1.6] atol=1e-8
+        @test sum(GenX.capacity_payment_reported_revenue(model,inputs))≈value(model[:eTotalCapPayment])
+        mktempdir() do path
+            GenX.write_capacity_payment(model,inputs,path,settings)
+            per=CSV.read(joinpath(path,"capacity_payment_per_unit.csv"),DataFrame)
+            total=CSV.read(joinpath(path,"capacity_payment_total.csv"),DataFrame)
+            delivery=CSV.read(joinpath(path,"capacity_payment_delivery.csv"),DataFrame)
+            @test per.AccreditedCapacityMW≈paid[:,1]*1000 atol=1e-6
+            @test sum(per.CapacityPaymentTotal)≈only(total.TotalCapacityPayment)
+            @test sum(per.CapPayment_1)≈only(total.TotalCapacityPayment)
+            @test only(delivery.PaidCapacityMW)≈expected*1000 atol=1e-6
+        end
+    end
+end
+
+@testset "delivery cap blocks profitable idle expansion" begin
+    model=Model(HiGHS.Optimizer);set_silent(model)
+    @variable(model,capacity>=0)
+    @variable(model,flow[1:1,1:1])
+    fix(flow[1,1],2.0)
+    model[:eTotalCap]=[capacity];model[:vFLOW]=flow;model[:eObj]=0.1*capacity
+    GenX.create_empty_expression!(model,:eCapPayment,1)
+    resource=GenX.Thermal(Dict{Symbol,Any}(:resource=>"external",:zone=>2))
+    inputs=Dict{String,Any}("G"=>1,"Z"=>2,"L"=>1,"NEW_CAP"=>[1],
+        "RESOURCES"=>[resource],"NCapacityPaymentRegions"=>1,
+        "capacity_payment_price"=>[0.15],"CAPACITY_PAYMENT_DERATING_FACTOR"=>ones(1,1),
+        "capacity_payment_delivery_enabled"=>true,"capacity_payment_crm_zones"=>[[1]],
+        "capacity_payment_critical_hours"=>[1],"capacity_payment_line_derating"=>zeros(1,1),
+        "capacity_payment_line_participation"=>-ones(1,1),
+        "pTrans_Start_Zone"=>[2],"pTrans_End_Zone"=>[1])
+    GenX.capacity_payment!(model,inputs,GenX.default_settings())
+    @objective(model,Min,model[:eObj]);optimize!(model)
+    @test termination_status(model)==MOI.OPTIMAL
+    @test value(capacity)≈2.0
+    @test objective_value(model)≈-0.1
+end
+
 function capacity_payment_resource(; name = "Test resource", max_cap = 10.0)
     attributes = Dict{Symbol, Any}(
         :resource => name,
