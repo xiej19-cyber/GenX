@@ -19,12 +19,12 @@ CapacityPaymentReference: multihours
 ```
 
 Deliverability defaults to 1. For multi-zone systems, the reference defaults to
-multihours and requires the following files already used by the CRM case:
+multihours and requires the following independent payment inputs:
 
-- `policies/CRM_multihours.csv`: maps zones to CRM/payment regions, in the same
+- `policies/CRM_payment.csv`: maps zones to payment regions, in the same
   numbered order as `CapPayment_1`, `CapPayment_2`, etc. Positive CapRes entries
   identify member zones. The reserve percentage is not imposed in Payment.
-- `policies/CRM_multihours_selected.csv`: exactly one `CapRes,t` row per payment
+- `policies/CRM_payment_selected.csv`: exactly one `CapRes,t` row per payment
   region. Multiple selected hours are rejected because the annual payment
   price's interpretation would otherwise be ambiguous.
 - `system/Network.csv`: same `DerateCapRes_r` and `CapRes_Excl_r` convention as
@@ -33,9 +33,13 @@ multihours and requires the following files already used by the CRM case:
   source zone directly to a member zone. All eligible connecting flows from the
   same source zone are aggregated, as in the CRM modules.
 
-Set `CapacityPaymentReference: peakload` to use `CRM_peakload.csv` and determine
-each region's hour from its maximum aggregate demand. No selected-hour file is
-needed in that mode. Single-zone systems retain the local-resource payment rule
+`CapacityPaymentReference` selects only the critical-hour method; it never selects
+another policy's files. Set it to `peakload` to determine each payment region's
+hour from its maximum aggregate demand, using the same `CRM_payment.csv` geography.
+No selected-hour file is needed in that mode. The default `multihours` method
+reads `CRM_payment_selected.csv`. Neither method requires enabling or running CRM.
+The file schemas match the corresponding CRM inputs, so existing region/hour
+inputs can be copied and renamed when the intended definitions are identical. Single-zone systems retain the local-resource payment rule
 and require no CRM reference files. `CapacityPaymentDeliverability: 0` explicitly
 restores the legacy uncapped nameplate-based payment behavior.
 
@@ -43,6 +47,11 @@ Payment still reads prices from `Capacity_payment.csv` (currency/accredited MW
 per year) and factors from `Resource_capacity_payment.csv`. Loading reference
 metadata does not enable CRM quantity constraints or CRM slack penalties and
 does not overwrite the CRM inputs namespace.
+
+The included `CRM_payment.csv` and `CRM_payment_selected.csv` illustrate seven
+payment regions, with one zone per region and timestep 1 as a placeholder.
+Replace these zone memberships and critical timesteps for your case; the region
+count must match `Capacity_payment.csv` and the resource assignment columns.
 
 ## Accounting
 

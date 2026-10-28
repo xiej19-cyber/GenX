@@ -10,6 +10,7 @@ function default_settings()
         "CRM_multihours" => 0,
         "CapacityPayment" => 0,
         "CapacityPaymentDeliverability" => 1,
+        # Critical-hour method only; geography always comes from CRM_payment.csv.
         "CapacityPaymentReference" => "multihours",
         "CO2Cap" => 0,
         "StorageLosses" => 1,

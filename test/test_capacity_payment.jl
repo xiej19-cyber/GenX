@@ -7,12 +7,10 @@ using JuMP
     mktempdir() do case_path
         mkpath(joinpath(case_path,"policies"))
         mkpath(joinpath(case_path,"system"))
-        CSV.write(joinpath(case_path,"policies","CRM_multihours.csv"),
+        CSV.write(joinpath(case_path,"policies","CRM_payment.csv"),
             DataFrame(Zone=[1,2],CapRes_1=[0.15,0.0]))
-        CSV.write(joinpath(case_path,"policies","CRM_multihours_selected.csv"),
+        CSV.write(joinpath(case_path,"policies","CRM_payment_selected.csv"),
             DataFrame(CapRes=[1],t=[2]))
-        CSV.write(joinpath(case_path,"policies","CRM_peakload.csv"),
-            DataFrame(Zone=[1,2],CapRes_1=[0.15,0.0]))
         CSV.write(joinpath(case_path,"system","Network.csv"),
             DataFrame(DerateCapRes_1=[0.0],CapRes_Excl_1=[-1.0]))
         settings=GenX.default_settings()
@@ -23,16 +21,25 @@ using JuMP
         @test inputs["capacity_payment_crm_zones"]==[[1]]
         @test inputs["capacity_payment_critical_hours"]==[2]
         @test inputs["NCapacityReserveMargin"]==99
+        rm(joinpath(case_path,"policies","CRM_payment_selected.csv"))
         settings["CapacityPaymentReference"]="peakload"
         GenX.load_capacity_payment_delivery!(settings,case_path,inputs)
         @test inputs["capacity_payment_critical_hours"]==[3]
         settings["CapacityPaymentReference"]="multihours"
-        CSV.write(joinpath(case_path,"policies","CRM_multihours_selected.csv"),
+        CSV.write(joinpath(case_path,"policies","CRM_payment_selected.csv"),
             DataFrame(CapRes=[1,1],t=[1,2]))
         @test_throws ErrorException GenX.load_capacity_payment_delivery!(settings,case_path,inputs)
         settings["CapacityPaymentDeliverability"]=0
         GenX.load_capacity_payment_delivery!(settings,case_path,inputs)
         @test !inputs["capacity_payment_delivery_enabled"]
+        settings["CapacityPaymentDeliverability"]=1
+        rm(joinpath(case_path,"policies","CRM_payment.csv"))
+        # Other policies' files cannot substitute for payment's own geography.
+        CSV.write(joinpath(case_path,"policies","CRM_multihours.csv"),
+            DataFrame(Zone=[1,2],CapRes_1=[0.15,0.0]))
+        CSV.write(joinpath(case_path,"policies","CRM_peakload.csv"),
+            DataFrame(Zone=[1,2],CapRes_1=[0.15,0.0]))
+        @test_throws ErrorException GenX.load_capacity_payment_delivery!(settings,case_path,inputs)
     end
 end
 

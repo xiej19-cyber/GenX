@@ -69,7 +69,7 @@ function load_capacity_payment!(setup::Dict, case_path::AbstractString, inputs::
     return nothing
 end
 
-"""Load CRM geography and one critical hour without enabling CRM quantity constraints."""
+"""Load independent payment geography and one critical hour without enabling CRM quantity constraints."""
 function load_capacity_payment_delivery!(setup::Dict, case_path::AbstractString, inputs::Dict)
     enabled = get(setup, "CapacityPaymentDeliverability", 1) == 1 && get(inputs, "Z", 1) > 1
     inputs["capacity_payment_delivery_enabled"] = enabled
@@ -77,7 +77,7 @@ function load_capacity_payment_delivery!(setup::Dict, case_path::AbstractString,
     reference = get(setup, "CapacityPaymentReference", "multihours")
     reference in ("peakload", "multihours") || error("Invalid CapacityPaymentReference: $reference")
     policy_path = joinpath(case_path, setup["PoliciesFolder"])
-    filename = "CRM_$(reference).csv"
+    filename = "CRM_payment.csv"
     path = joinpath(policy_path, filename)
     isfile(path) || error("Capacity payment deliverability requires $path; set CapacityPaymentDeliverability=0 only to use legacy nameplate payments.")
     mat = extract_matrix_from_dataframe(load_dataframe(path), "CapRes")
@@ -85,14 +85,14 @@ function load_capacity_payment_delivery!(setup::Dict, case_path::AbstractString,
     size(mat) == (inputs["Z"], N) || error("$filename must have one row per zone and one CapRes column per payment region.")
     all(x -> x isa Real && isfinite(x) && x >= 0, mat) || error("Invalid CapRes values in $filename.")
     zones = [findall(!iszero, mat[:, r]) for r in 1:N]
-    all(z -> !isempty(z), zones) || error("Every payment region must contain a CRM zone.")
+    all(z -> !isempty(z), zones) || error("Every payment region must contain a payment zone.")
     hours = zeros(Int, N)
     if reference == "multihours"
-        path = joinpath(policy_path, "CRM_multihours_selected.csv")
+        path = joinpath(policy_path, "CRM_payment_selected.csv")
         isfile(path) || error("Capacity payment deliverability requires $path.")
         selected = load_dataframe(path)
         all(c -> c in propertynames(selected), [:CapRes, :t]) || error("Selected hours require CapRes and t columns.")
-        all(x -> x isa Real && isfinite(x) && isinteger(x) && 1 <= x <= N, selected.CapRes) || error("Invalid selected CRM identifiers.")
+        all(x -> x isa Real && isfinite(x) && isinteger(x) && 1 <= x <= N, selected.CapRes) || error("Invalid selected payment region identifiers.")
         all(x -> x isa Real && isfinite(x) && isinteger(x) && 1 <= x <= inputs["T"], selected.t) || error("Invalid selected timesteps.")
         for r in 1:N
             ts = selected[selected.CapRes .== r, :t]
