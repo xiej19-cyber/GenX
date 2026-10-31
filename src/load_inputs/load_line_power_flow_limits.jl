@@ -68,6 +68,8 @@ function validate_line_power_profile_dataframe(
     isempty(missing_columns) ||
         error("$LINE_POWER_PROFILE_FILENAME is missing required columns $missing_columns.")
 
+    # A shared profile file may contain unused columns; validate only profiles
+    # referenced by Network.csv.
     P = length(profile_names)
     down = Matrix{Float64}(undef, expected_length, P)
     up = Matrix{Float64}(undef, expected_length, P)

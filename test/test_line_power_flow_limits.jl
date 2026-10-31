@@ -130,8 +130,16 @@ end
                 "Unused_down" => [-1.0, -1.0],
             ],
         )
+        loaded_inputs = copy(inputs)
+        GenX.load_line_power_flow_limits!(
+            base_setup(), case_path, loaded_inputs, network)
+        @test loaded_inputs["LINE_POWER_LIMIT_PROFILE_NAMES"] == ["A"]
+        @test loaded_inputs["pLinePowerProfileUp"] == reshape([0.8, 0.9], 2, 1)
+        @test loaded_inputs["pLinePowerProfileDown"] == reshape([0.2, 0.3], 2, 1)
+
+        # Extra profiles do not hide a missing referenced profile.
         @test_throws ErrorException GenX.load_line_power_flow_limits!(
-            base_setup(), case_path, copy(inputs), network)
+            base_setup(), case_path, copy(inputs), network_fixture(["A", "B", "None"]))
 
         invalid_frames = [
             DataFrame(Time_Index = [1, 3], A_up = [0.8, 0.9], A_down = [0.2, 0.3]),
