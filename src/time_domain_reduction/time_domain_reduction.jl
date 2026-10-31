@@ -1023,7 +1023,7 @@ function write_tdr_line_power_flow_limits_from_raw(
     maximum(row_idx) <= nrow(raw_profile) ||
         error("TDR selected time index exceeds rows in raw $LINE_POWER_PROFILE_FILENAME.")
 
-    output = raw_profile[row_idx, :]
+    output = raw_profile[row_idx, required_line_power_profile_columns(profile_names)]
     output[!, :Time_Index] = 1:nrow(output)
     CSV.write(joinpath(output_dir, LINE_POWER_PROFILE_FILENAME), output)
     return output
@@ -1036,7 +1036,8 @@ end
 
 Concatenate full-resolution line-flow profiles from every planning stage and
 extract the representative periods selected by a concatenated multi-stage TDR
-run. Each stage must provide the same profile columns.
+run. Each stage must provide the referenced profile columns; unreferenced
+columns are ignored.
 """
 function write_tdr_line_power_flow_limits_from_raw_multistage_concat(
         inpath::String,
@@ -1047,7 +1048,7 @@ function write_tdr_line_power_flow_limits_from_raw_multistage_concat(
         TimestepsPerRepPeriod::Int,
         profile_names::Vector{String})
     raw_profiles = DataFrame[]
-    expected_columns = nothing
+    required_columns = required_line_power_profile_columns(profile_names)
 
     for per in 1:NumStages
         raw_system_dir = joinpath(
@@ -1063,12 +1064,7 @@ function write_tdr_line_power_flow_limits_from_raw_multistage_concat(
         demand_length = length(collect(skipmissing(raw_demand[!, :Time_Index])))
         validate_line_power_profile_dataframe(profile, profile_names, demand_length)
 
-        if expected_columns === nothing
-            expected_columns = names(profile)
-        elseif names(profile) != expected_columns
-            error("Columns of $LINE_POWER_PROFILE_FILENAME must be consistent across all stages.")
-        end
-        push!(raw_profiles, profile)
+        push!(raw_profiles, profile[:, required_columns])
     end
 
     raw_profile = vcat(raw_profiles...)

@@ -44,6 +44,9 @@ function write_costs(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
     cVar = value(EP[:eTotalCVarOut]) +
            (!isempty(inputs["STOR_ALL"]) ? value(EP[:eTotalCVarIn]) : 0.0) +
            (!isempty(inputs["FLEX"]) ? value(EP[:eTotalCVarFlexIn]) : 0.0)
+    if setup["CapacityReserveMargin"] > 0 && !isempty(inputs["STOR_ALL"])
+        cVar += value(EP[:eTotalCVarIn_virtual]) + value(EP[:eTotalCVarOut_virtual])
+    end
     cFix = value(EP[:eTotalCFix]) +
            (!isempty(inputs["STOR_ALL"]) ? value(EP[:eTotalCFixEnergy]) : 0.0) +
            (!isempty(inputs["STOR_ASYMMETRIC"]) ? value(EP[:eTotalCFixCharge]) : 0.0)
@@ -51,9 +54,15 @@ function write_costs(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
     cFuel = value.(EP[:eTotalCFuelOut])
 
     if !isempty(VRE_STOR)
+        if setup["MultiStage"] == 0
+            cFix -= value(EP[:eTotalCGrid])
+        end
         cFix += ((!isempty(inputs["VS_DC"]) ? value(EP[:eTotalCFixDC]) : 0.0) +
                  (!isempty(inputs["VS_SOLAR"]) ? value(EP[:eTotalCFixSolar]) : 0.0) +
                  (!isempty(inputs["VS_WIND"]) ? value(EP[:eTotalCFixWind]) : 0.0))
+        if !isempty(VS_ELEC)
+            cFix += value(EP[:eTotalCFixElec])
+        end
         cVar += ((!isempty(inputs["VS_SOLAR"]) ? value(EP[:eTotalCVarOutSolar]) : 0.0) +
                  (!isempty(inputs["VS_WIND"]) ? value(EP[:eTotalCVarOutWind]) : 0.0))
         if !isempty(inputs["VS_STOR"])
@@ -67,6 +76,13 @@ function write_costs(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
                      (!isempty(inputs["VS_ASYM_AC_DISCHARGE"]) ?
                       value(EP[:eTotalCFixDischarge_AC]) : 0.0))
             cVar += (!isempty(inputs["VS_STOR"]) ? value(EP[:eTotalCVarStor]) : 0.0)
+        end
+        if setup["CapacityReserveMargin"] > 0 || setup["CRM_peakload"] > 0 ||
+           setup["CRM_multihours"] > 0
+            cVar += value(EP[:eTotalCVar_Charge_DC_virtual]) +
+                    value(EP[:eTotalCVar_Discharge_DC_virtual]) +
+                    value(EP[:eTotalCVar_Charge_AC_virtual]) +
+                    value(EP[:eTotalCVar_Discharge_AC_virtual])
         end
         total_cost = [
             value(EP[:eObj]),
@@ -145,6 +161,18 @@ function write_costs(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
         dfCost[9, 2] += value(EP[:eTotalCMaxCapSlack])
     end
 
+    for (price_key, cost_expression) in (
+        ("MinCFPriceCap", :eCTotalMinCFSlack),
+        ("MinURPriceCap", :eCTotalMinURSlack),
+        ("MinGenFractionPriceCap", :eCTotalMinGenFractionSlack),
+        ("MaxCapSpPriceCap", :eTotalCMaxCapSpSlack),
+        ("MinCapSpPriceCap", :eTotalCMinCapSpSlack),
+    )
+        if haskey(inputs, price_key)
+            dfCost[9, 2] += value(EP[cost_expression])
+        end
+    end
+
     if haskey(inputs, "H2DemandPriceCap")
         dfCost[9, 2] += value(EP[:eTotalCH2DemandSlack])
     end
@@ -180,6 +208,7 @@ function write_costs(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
         tempHydrogenValue = 0.0
         tempCCO2 = 0.0
         tempCapacityPayment = 0.0
+        tempCGrid = 0.0
 
         Y_ZONE = resources_in_zone_by_rid(gen, z)
         STOR_ALL_ZONE = intersect(inputs["STOR_ALL"], Y_ZONE)
@@ -219,6 +248,11 @@ function write_costs(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
         if !isempty(VRE_STOR)
             gen_VRE_STOR = gen.VreStorage
             Y_ZONE_VRE_STOR = resources_in_zone_by_rid(gen_VRE_STOR, z)
+
+            if setup["MultiStage"] == 0
+                tempCGrid = sum(value.(EP[:eCGrid][Y_ZONE_VRE_STOR]), init = 0.0)
+                tempCFix -= tempCGrid
+            end
 
             # Fixed Costs
             eCFix_VRE_STOR = 0.0
@@ -350,6 +384,7 @@ function write_costs(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
             tempHydrogenValue *= ModelScalingFactor^2
             tempCCO2 *= ModelScalingFactor^2
             tempCapacityPayment *= ModelScalingFactor^2
+            tempCGrid *= ModelScalingFactor^2
         end
         temp_cost_list = [
             tempCTotal,
@@ -364,7 +399,7 @@ function write_costs(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
             tempCCO2
         ]
         if !isempty(VRE_STOR)
-            push!(temp_cost_list, "-")
+            push!(temp_cost_list, setup["MultiStage"] == 0 ? tempCGrid : "-")
         end
         if !isempty(ELECTROLYZER_ALL)
             push!(temp_cost_list, tempHydrogenValue)
