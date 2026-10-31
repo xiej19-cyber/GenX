@@ -51,24 +51,22 @@ function validate_line_power_time_index(df::DataFrame, expected_length::Int)
     return nothing
 end
 
+function required_line_power_profile_columns(profile_names::Vector{String})
+    return ["Time_Index";
+        [string(profile, suffix) for profile in profile_names for suffix in ("_up", "_down")]]
+end
+
 function validate_line_power_profile_dataframe(
         df::DataFrame,
         profile_names::Vector{String},
         expected_length::Int)
     validate_line_power_time_index(df, expected_length)
 
-    expected_columns = Set(["Time_Index"])
-    for profile in profile_names
-        push!(expected_columns, string(profile, "_up"))
-        push!(expected_columns, string(profile, "_down"))
-    end
+    expected_columns = Set(required_line_power_profile_columns(profile_names))
     actual_columns = Set(names(df))
     missing_columns = sort(collect(setdiff(expected_columns, actual_columns)))
     isempty(missing_columns) ||
         error("$LINE_POWER_PROFILE_FILENAME is missing required columns $missing_columns.")
-    extra_columns = sort(collect(setdiff(actual_columns, expected_columns)))
-    isempty(extra_columns) ||
-        error("$LINE_POWER_PROFILE_FILENAME contains columns not referenced by Network.csv: $extra_columns.")
 
     P = length(profile_names)
     down = Matrix{Float64}(undef, expected_length, P)

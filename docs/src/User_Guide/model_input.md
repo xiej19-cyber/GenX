@@ -129,10 +129,12 @@ hyphens, and internal spaces. Empty names, leading or trailing whitespace,
 control characters, and the reserved value `None` as a real profile name are
 not allowed. Multiple lines may reference the same pair of columns.
 
-Every referenced profile must have both columns, and unreferenced profile
-columns are rejected. `Time_Index` must be exactly `1:T`, and all values must
-satisfy `-1 <= down <= up <= 1`. The values are per unit and are not affected
-by `ParameterScale`.
+Every referenced profile must have both columns. Additional unreferenced
+columns are ignored, even if they are unpaired or contain values outside the
+profile bounds. `Time_Index` must be exactly `1:T`, and referenced profile
+values must satisfy `-1 <= down <= up <= 1`. Duplicate column names are
+rejected. The values are per unit and are not affected by `ParameterScale`.
+With TDR, only referenced profile columns are written to the reduced file.
 
 
 ### 1.3 Demand\_data.csv (Load\_data.csv)

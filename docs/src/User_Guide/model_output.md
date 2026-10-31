@@ -38,15 +38,23 @@ Reports optimal objective function value and contribution of each term by zone.
 |**Output** |**Description** |**Units** |
 | :------------ | :-----------|:-----------|
 | cTotal |Total objective function value |USD |
-| cFix |Total annualized investment and fixed operating & maintainenance (FOM) costs associated with all resources |USD |
-| cVar |Total annual variable cost associated with all resources; includes fuel costs for thermal plants |USD |
+| cFix |Annualized investment and fixed operating and maintenance costs; for single-stage cases with co-located VRE-storage, excludes the grid-connection costs reported separately below |USD |
+| cVar |Annual variable operating costs, including virtual charging and discharging costs when capacity reserve margins are active; excludes fuel costs |USD |
+| cFuel |Total annual fuel costs for generation |USD |
 | cNSE |Total annual cost of non-served energy |USD |
 | cStart |Total annual cost of start-up of thermal power plants| USD |
 | cUnmetRsv |Total annual cost of not meeting time-dependent operating reserve (spinning) requirements |USD |
 | cNetworkExp |Total cost of network expansion |USD |
-| cUnmetPolicyPenalty |Total penalties for relaxed policy constraints, including optional line-power-limit violations |USD |
-| cEmissionsRevenue |Total and zonal emissions revenue |USD |
-| cEmissionsCost |Total an zonal emissions cost |USD |
+| cUnmetPolicyPenalty |Total penalties for relaxed policy constraints, including minimum capacity factor, minimum utilization rate, minimum generation fraction, simple minimum and maximum capacity requirements, and optional line-power-limit violations |USD |
+| cCO2 |CO2 sequestration costs |USD |
+| cGridConnection |Grid-connection investment and fixed costs of co-located VRE-storage, reported separately from `cFix` in single-stage cases |USD |
+| cHydrogenRevenue |Hydrogen revenue, shown as a negative contribution to total cost |USD |
+| cTransVOM |Variable transmission cost from line hurdle rates |USD |
+| cCapacityPayment |Capacity payment, shown as a negative contribution to total cost |USD |
+
+In single-stage cases, the `Total` column of `cTotal` is the sum of the other
+cost rows (subject to numerical tolerance). Some system-wide costs have no
+zone allocation, so the same equality does not necessarily hold for each zone.
 
 ### 1.3 emissions.csv
 
