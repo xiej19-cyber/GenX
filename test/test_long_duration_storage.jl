@@ -23,6 +23,8 @@ end
         (4, [2208.0, 2208.0, 2184.0, 2160.0]),
         (12, Float64.([31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] .* 24)),
         (4, [2208.0, 2208.0, 2184.0, 2136.0]),
+        (4, [2160.0, 2208.0, 2208.0, 2184.0]),
+        (4, [2136.0, 2208.0, 2208.0, 2184.0]),
         (4, fill(2184.0, 4)),
         (12, Float64.([31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 30] .* 24)),
     )
@@ -49,6 +51,23 @@ end
     GenX.build_manual_representative_week_period_map!(seasonal_inputs)
     period_map = seasonal_inputs["Period_Map"]
     @test period_map.Rep_Period_Index[[1, 14, 27, 40, 52]] == [4, 1, 2, 3, 4]
+
+    # Reordering the input profiles must preserve their chronological seasons
+    # and calendar anchors, including winter on both sides of the year boundary.
+    for weights in ([2160.0, 2208.0, 2208.0, 2184.0],
+                    [2136.0, 2208.0, 2208.0, 2184.0])
+        winter_inputs = Dict{String, Any}(
+            "REP_PERIOD" => 4,
+            "hours_per_subperiod" => 168,
+            "Weights" => weights,
+        )
+        GenX.build_manual_representative_week_period_map!(winter_inputs)
+        winter_map = winter_inputs["Period_Map"]
+        @test winter_map.Rep_Period_Index == mod1.(period_map.Rep_Period_Index .+ 1, 4)
+        @test winter_map.Rep_Period == period_map.Rep_Period
+        @test winter_map.Rep_Period_Index[[1, 14, 27, 40, 52]] == [1, 2, 3, 4, 1]
+        @test [count(==(r), winter_map.Rep_Period_Index) for r in 1:4] == fill(13, 4)
+    end
 
     invalid_resource = independent_lds_test_resource(lds = 2)
     @test length(GenX.check_LDS_applicability(invalid_resource)) == 1

@@ -63,8 +63,11 @@ end
     build_manual_representative_week_period_map!(inputs)
 
 Construct the chronological mapping needed by independent long-duration storage for
-manually selected representative weeks. Four input weeks are interpreted in the order
-spring, summer, autumn, winter. Twelve input weeks are interpreted in January-to-December
+manually selected representative weeks. Four input weeks may follow either
+spring/summer/autumn/winter or winter/spring/summer/autumn order, identified from
+their calendar-season weights. Equal 13-week weights retain the legacy spring-first
+order; use an explicit Period_map.csv when equal weights have another order.
+Twelve input weeks are interpreted in January-to-December
 order. This is deliberately independent of the `TimeDomainReduction` setting.
 
 For four seasonal weeks, the 52 complete seven-day periods are divided into the same
@@ -100,7 +103,8 @@ function build_manual_representative_week_period_map!(inputs::Dict)
         # Also retain the alternative exact-52-week convention in which every
         # seasonal representative week occurs exactly thirteen times.
         exact_week_weights = fill(13.0 * hours_per_period, 4)
-        (calendar_year_weights, truncated_calendar_weights, exact_week_weights)
+        (calendar_year_weights, truncated_calendar_weights, exact_week_weights,
+            circshift(calendar_year_weights, 1), circshift(truncated_calendar_weights, 1))
     else
         (calendar_year_weights, truncated_calendar_weights)
     end
@@ -111,12 +115,16 @@ function build_manual_representative_week_period_map!(inputs::Dict)
         "manual representative weeks, but found $weights (sum=$(sum(weights))). " *
         "Use an explicit system/Period_map.csv for another weighting convention.")
 
+    winter_first = n_representative_periods == 4 &&
+                   any(expected -> all(isapprox.(weights, expected; atol = 1e-6)),
+        (circshift(calendar_year_weights, 1), circshift(truncated_calendar_weights, 1)))
     year_start = DateTime(2021, 1, 1) # fixed non-leap reference calendar
     n_periods = 52
     representative_index = if n_representative_periods == 4
         # Match the established manual/TDR seasonal convention: 13 complete
         # weeks per season, ordered spring, summer, autumn, winter.
-        [fill(4, 8); fill(1, 13); fill(2, 13); fill(3, 13); fill(4, 5)]
+        spring_first_index = [fill(4, 8); fill(1, 13); fill(2, 13); fill(3, 13); fill(4, 5)]
+        winter_first ? mod1.(spring_first_index .+ 1, 4) : spring_first_index
     else
         monthly_index = Vector{Int}(undef, n_periods)
         for period in 1:n_periods
@@ -129,7 +137,8 @@ function build_manual_representative_week_period_map!(inputs::Dict)
     # Anchor each modeled representative profile at the complete calendar week
     # containing the second week of its source month. The anchor fixes the absolute
     # SOC profile once; all other occurrences may have their own inter-period SOC.
-    source_months = n_representative_periods == 4 ? [4, 7, 10, 1] : collect(1:12)
+    source_months = n_representative_periods == 4 ?
+                    (winter_first ? [1, 4, 7, 10] : [4, 7, 10, 1]) : collect(1:12)
     anchors = Vector{Int}(undef, n_representative_periods)
     for representative in 1:n_representative_periods
         source_date = Date(2021, source_months[representative], 8)
