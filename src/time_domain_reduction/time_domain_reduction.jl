@@ -241,14 +241,16 @@ function cluster(ClusterMethod,
         nIters,
         v = false,
         random = true)
+    # Seed once, including the initial fit; repetitions must explore distinct
+    # initializations while the complete run remains reproducible.
+    !random && Random.seed!(SEED)
+    1 <= NClusters <= ncol(ClusteringInputDF) || error(
+        "The number of TDR clusters must be between 1 and the number of candidate periods.")
     if ClusterMethod == "kmeans"
         DistMatrix = pairwise(Euclidean(), Matrix(ClusteringInputDF), dims = 2)
         R = kmeans(Matrix(ClusteringInputDF), NClusters, init = :kmcen)
 
         for i in 1:nIters
-            if !random
-                Random.seed!(SEED)
-            end
             R_i = kmeans(Matrix(ClusteringInputDF), NClusters)
 
             if R_i.totalcost < R.totalcost
@@ -266,9 +268,11 @@ function cluster(ClusterMethod,
 
         M = []
         for i in 1:NClusters
+            members = findall(==(i), A)
+            isempty(members) && error("TDR kmeans returned an empty cluster.")
             dists = [euclidean(Centers[:, i], ClusteringInputDF[!, j])
-                     for j in 1:size(ClusteringInputDF, 2)]
-            push!(M, argmin(dists))
+                     for j in members]
+            push!(M, members[argmin(dists)])
         end
 
     elseif ClusterMethod == "kmedoids"
@@ -276,9 +280,6 @@ function cluster(ClusterMethod,
         R = kmedoids(DistMatrix, NClusters, init = :kmcen)
 
         for i in 1:nIters
-            if !random
-                Random.seed!(SEED)
-            end
             R_i = kmedoids(DistMatrix, NClusters)
             if R_i.totalcost < R.totalcost
                 R = R_i
@@ -777,6 +778,8 @@ end
 """
     calibrate_tdr_variability!(output, raw, weights, TimestepsPerRepPeriod)
 
+Standalone calibration utility for bounded capacity factors. It is not used
+by TDR output writers and must not be applied to CSP inflows or MinVar.
 Scale every non-time-index variability profile so its weighted annual
 available hours equal the full-resolution input. Scaling is multiplicative and
 clipped to `[0, 1]`; a monotone bisection finds the bounded multiplier. This
@@ -946,10 +949,7 @@ function write_tdr_generators_variability_from_raw(
 
     gv_out = raw_gv[row_idx, :]
     if weights !== nothing
-        diagnostics = calibrate_tdr_variability!(
-            gv_out, raw_gv, weights, TimestepsPerRepPeriod)
-        CSV.write(joinpath(dirname(out_gvar_path),
-            "Generators_variability_diagnostics.csv"), diagnostics)
+        @warn "TDR extracts Generators_variability.csv unchanged; the legacy weights keyword no longer calibrates or clips profiles."
     end
     insertcols!(gv_out, 1, :Time_Index => 1:nrow(gv_out))
 
@@ -1200,10 +1200,7 @@ function write_tdr_generators_variability_from_raw_multistage_concat(
 
     gv_out = raw_gv_concat[row_idx, :]
     if weights !== nothing
-        diagnostics = calibrate_tdr_variability!(
-            gv_out, raw_gv_concat, weights, TimestepsPerRepPeriod)
-        CSV.write(joinpath(dirname(out_gvar_path),
-            "Generators_variability_diagnostics.csv"), diagnostics)
+        @warn "TDR extracts Generators_variability.csv unchanged; the legacy weights keyword no longer calibrates or clips profiles."
     end
     insertcols!(gv_out, 1, :Time_Index => 1:nrow(gv_out))
 
@@ -1304,18 +1301,42 @@ function cluster_inputs(inpath,
     DemandWeight = myTDRsetup["DemandWeight"]
     WeightTotal = myTDRsetup["WeightTotal"]
     ClusterFuelPrices = myTDRsetup["ClusterFuelPrices"]
+    if haskey(myTDRsetup, "RandomSeed")
+        seed = myTDRsetup["RandomSeed"]
+        seed isa Integer && seed >= 0 || error("RandomSeed must be a nonnegative integer.")
+        Random.seed!(seed)
+    end
     SeasonalClustering = get(myTDRsetup, "SeasonalClustering", 0)
     PeriodsPerSeason = get(myTDRsetup, "PeriodsPerSeason", MinPeriods ÷ 4)
     PreserveAnnualCapacityFactors =
-        get(myTDRsetup, "PreserveAnnualCapacityFactors", 1)
+        get(myTDRsetup, "PreserveAnnualCapacityFactors", 0)
     AggregateProfilesForClustering =
         get(myTDRsetup, "AggregateProfilesForClustering", 1)
     TimeDomainReductionFolder = mysetup["TimeDomainReductionFolder"]
 
     SeasonalClustering in (0, 1) ||
         error("SeasonalClustering must be either 0 or 1.")
-    PreserveAnnualCapacityFactors in (0, 1) ||
-        error("PreserveAnnualCapacityFactors must be either 0 or 1.")
+    PreserveAnnualCapacityFactors == 0 || error(
+        "Set PreserveAnnualCapacityFactors=0: TDR must extract raw variability " *
+        "unchanged, including CSP inflows above 1 and thermal MinVar profiles.")
+    TimestepsPerRepPeriod isa Integer && TimestepsPerRepPeriod > 0 ||
+        error("TimestepsPerRepPeriod must be a positive integer.")
+    MinPeriods isa Integer && MaxPeriods isa Integer &&
+        1 <= MinPeriods <= MaxPeriods || error(
+        "TDR requires integer period counts with 1 <= MinPeriods <= MaxPeriods.")
+    nReps isa Integer && nReps >= 1 || error("nReps must be a positive integer.")
+    isfinite(WeightTotal) && WeightTotal > 0 ||
+        error("WeightTotal must be finite and positive.")
+    isfinite(DemandWeight) && DemandWeight > 0 ||
+        error("DemandWeight must be finite and positive.")
+    Iterate in (0, 1) && UseExtremePeriods in (0, 1) &&
+        ClusterFuelPrices in (0, 1) || error(
+        "IterativelyAddPeriods, UseExtremePeriods and ClusterFuelPrices must be 0 or 1.")
+    ScalingMethod in ("N", "S") || error("ScalingMethod must be N or S.")
+    ClusterMethod in ("kmeans", "kmedoids") ||
+        error("ClusterMethod must be kmeans or kmedoids.")
+    isfinite(Threshold) && Threshold >= 0 ||
+        error("Threshold must be finite and nonnegative.")
     AggregateProfilesForClustering in (0, 1) ||
         error("AggregateProfilesForClustering must be either 0 or 1.")
     if SeasonalClustering == 1
@@ -1346,6 +1367,9 @@ function cluster_inputs(inpath,
 
     # Define a local version of the setup so that you can modify the mysetup["ParameterScale"] value to be zero in case it is 1
     mysetup_local = copy(mysetup)
+    # Re-clustering must always read full-resolution system inputs, even when
+    # an older, complete TDR_results directory already exists.
+    mysetup_local["TimeDomainReduction"] = 0
     # If ParameterScale =1 then make it zero, since clustered inputs will be scaled prior to generating model
     mysetup_local["ParameterScale"] = 0  # Performing cluster and report outputs in user-provided units
 
@@ -1410,6 +1434,7 @@ function cluster_inputs(inpath,
         if v
             println("Not MultiStage")
         end
+        prevent_doubled_timedomainreduction(joinpath(inpath, mysetup["SystemFolder"]))
         myinputs = load_inputs(mysetup_local, inpath)
         RESOURCE_ZONES = myinputs["RESOURCE_ZONES"]
         RESOURCES = myinputs["RESOURCE_NAMES"]
@@ -1431,10 +1456,9 @@ function cluster_inputs(inpath,
         v)
 
     # Determine whether or not to time domain reduce fuel profiles as well based on user choice and file structure (i.e., variable fuels in Fuels_data.csv)
-    IncludeFuel = true
-    if (ClusterFuelPrices != 1) || (AllFuelsConst)
-        IncludeFuel = false
-    end
+    # Fuel output must retain selected hourly prices even when prices are not
+    # clustering features. Only entirely constant fuels need the placeholder.
+    IncludeFuel = !AllFuelsConst
 
     # Put it together!
     InputData = DataFrame(Dict(all_col_names[c] => all_profiles[c]
@@ -1496,7 +1520,14 @@ function cluster_inputs(inpath,
     ##### STEP 2: Identify extreme periods in the model, Reshape data for clustering
 
     # Total number of subperiods available in the dataset, where each subperiod length = TimestepsPerRepPeriod
-    NumDataPoints = Nhours ÷ TimestepsPerRepPeriod # 364 weeks in 7 years
+    NumDataPoints = Nhours ÷ TimestepsPerRepPeriod # Complete candidate periods
+    NumDataPoints > 0 || error("TDR input is shorter than one representative period.")
+    MaxPeriods <= NumDataPoints || error(
+        "MaxPeriods exceeds the number of complete input periods ($NumDataPoints).")
+    tail_hours = Nhours % TimestepsPerRepPeriod
+    tail_hours == 0 || @warn "TDR has $tail_hours trailing hours outside complete " *
+        "candidate periods; they cannot be selected. WeightTotal rescaling " *
+        "does not preserve their chronological extremes."
     if v
         println("Total Subperiods in the data set: ", NumDataPoints)
     end
@@ -1593,6 +1624,13 @@ function cluster_inputs(inpath,
             println(ExtremeWksList)
         end
         sort!(unique!(ExtremeWksList))
+        all(w -> 1 <= w <= NumDataPoints, ExtremeWksList) || error(
+            "A requested TDR extreme falls in the trailing incomplete period. " *
+            "It cannot be silently replaced by a different week; provide " *
+            "complete-period inputs or explicitly handle the trailing hours.")
+        length(ExtremeWksList) < MinPeriods || error(
+            "MinPeriods=$MinPeriods must exceed the number of distinct extreme " *
+            "periods ($(length(ExtremeWksList))) so at least one ordinary cluster remains.")
         if v
             println("Reduced to ", ExtremeWksList)
         end
@@ -1605,6 +1643,7 @@ function cluster_inputs(inpath,
                        :value] for w in 1:NumDataPoints if w <= NumDataPoints]
     ModifiedData = DataFrame(Dict(Symbol(i) => DFsToConcat[i] for i in 1:NumDataPoints))
 
+    clustering_fuel_cols = ClusterFuelPrices == 1 ? fuel_col_names : String[]
     ClusteringAnnualData = if AggregateProfilesForClustering == 1
         aggregate_profiles_for_clustering(
             AnnualTSeriesNormalized,
@@ -1612,11 +1651,13 @@ function cluster_inputs(inpath,
             var_col_names,
             solar_col_names,
             wind_col_names,
-            fuel_col_names,
+            clustering_fuel_cols,
             col_to_zone_map,
         )
     else
-        select(AnnualTSeriesNormalized, Symbol.(OldColNames))
+        feature_columns = ClusterFuelPrices == 1 ? OldColNames :
+                          setdiff(OldColNames, fuel_col_names)
+        select(AnnualTSeriesNormalized, Symbol.(feature_columns))
     end
     ClusteringFeatureNames = names(ClusteringAnnualData)
     ClusteringAnnualData[:, :Group] .=

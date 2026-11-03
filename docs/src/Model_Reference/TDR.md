@@ -33,20 +33,19 @@ zones with many candidate projects from receiving unintended extra weight.
 The aggregation is used only for clustering; all original project-level GV
 columns are retained in the generated TDR input.
 
-Set `PreserveAnnualCapacityFactors: 1` (the default) to calibrate every
-selected generator-variability profile so its weighted annual available hours
-equal the full-resolution input. Calibration uses a bounded multiplicative
-factor and clips values at one, preserving the selected weeks' shape without
-creating invalid capacity factors. TDR writes
-`Generators_variability_diagnostics.csv` with the original, pre-calibration,
-and post-calibration available hours and the applied multiplier for every
-profile. Set the option to zero only when the unadjusted selected weeks are
-explicitly desired.
+Set `PreserveAnnualCapacityFactors: 0` (the default). TDR extracts every
+`Generators_variability.csv` column from the selected raw rows without scaling
+or clipping. This preserves CSP inflows above one, thermal `MinVar` profiles,
+and relationships between shared profiles. A value of `1` is rejected rather
+than silently changing these inputs. The standalone calibration helper is not
+used by the TDR output path. Weighted annual availability can therefore differ
+from the full-year input and must be validated after selection.
 
-## Demand extreme periods
+`RandomSeed` optionally fixes the random stream for reproducible clustering.
+`MinPeriods` counts both ordinary and extreme periods; it must exceed the
+number of distinct selected extremes so an ordinary cluster remains.
 
-When a demand extreme period is enabled, GenX preserves its original hourly
-peak values. The remaining representative periods are scaled independently by
-zone so that their weighted demand plus the unchanged extreme period exactly
-reproduces full-resolution annual zonal demand. Thus peak preservation no
-longer disables annual-energy conservation.
+Only complete candidate periods are clustered. With 8,760 hours and 168-hour
+periods, the final 24 hours are not candidate periods; TDR warns about this.
+An explicitly requested extreme in this incomplete period raises an actionable
+error. Rescaling `WeightTotal` to 8,760 does not preserve that day's chronology.

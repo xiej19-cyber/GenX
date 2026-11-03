@@ -24,3 +24,28 @@ It's also possible for GenX perform clustering separately from the optimization 
 |DemandWeight| Default = 1, a multiplier on demand columns to optionally prioritize better fits for demand profiles over resource capacity factor or fuel price profiles.|
 |WeightTotal |Default = 8760, the sum to which the relative weights of representative periods will be scaled.|
 |ClusterFuelPrices| Either 1 or 0, whether or not to use the fuel price time series in `Fuels_data.csv` in the clustering process. If 'no', this function will still write `Fuels_data.csv` in the TimeDomainReductionFolder with reshaped fuel prices based on the number and size of the representative periods but will not use the fuel price time series for selection of representative periods.|
+
+## Shared profiles and reproducibility
+
+Use `PreserveAnnualCapacityFactors: 0`. Generator variability is extracted
+unchanged, including values above one and thermal minimum-output profiles.
+TDR still calibrates demand to preserve annual zonal energy; this setting does
+not disable demand calibration. `RandomSeed: 1234` makes repeated clustering
+runs reproducible. Check annual availability errors instead of assuming they
+are removed by scaling.
+
+`MinPeriods` includes selected extreme periods, and must leave at least one
+ordinary cluster. `SeasonalClustering: 1` currently requires fixed period counts
+and `UseExtremePeriods: 0`. Inputs must be the aligned full-resolution series,
+not a previously sampled set of representative weeks.
+
+`ClusterFuelPrices: 0` excludes fuel prices from period selection but still
+extracts their original hourly prices at the selected timestamps. It does not
+replace variable prices by a constant. TDR re-runs always read full-resolution
+`system/` inputs, even if an older output folder exists.
+
+A complete TDR output folder includes `Period_map.csv`, and, when used by the
+raw case, `Minimum_commitment.csv` and `Line_power_flow_limits.csv`. Missing
+auxiliary files invalidate the cache. This is a completeness check, not a
+content fingerprint: after changing raw inputs or settings, explicitly run
+`run_timedomainreduction!` again or use a new output folder.

@@ -12,6 +12,10 @@ end
     include("test_minimum_commitment.jl")
 end
 
+@testset "TDR raw shared profiles" begin
+    include("test_tdr_raw_profiles.jl")
+end
+
 @testset "Minimum power variability" begin
     include("test_minimum_power_variability.jl")
 end

@@ -202,7 +202,9 @@ Returns:
 function get_systemfiles_path(setup::Dict,
         TDR_directory::AbstractString,
         path::AbstractString)
-    if setup["TimeDomainReduction"] == 1 && time_domain_reduced_files_exist(TDR_directory)
+    if setup["TimeDomainReduction"] == 1 && time_domain_reduced_files_exist(TDR_directory;
+            system_path = joinpath(path, setup["SystemFolder"]),
+            line_power_limits = get(setup, "LinePowerFlowLimits", 0) == 1)
         return TDR_directory
     else
         # If TDR is not used, then use the "system" directory specified in the setup
