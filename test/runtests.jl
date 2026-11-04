@@ -40,6 +40,10 @@ end
     include("test_ccus_capture_cap.jl")
 end
 
+@testset "Storage throughput cost" begin
+    include("test_storage_throughput_cost.jl")
+end
+
 @testset "Independent long-duration storage" begin
     include("test_long_duration_storage.jl")
 end

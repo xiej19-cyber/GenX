@@ -48,6 +48,10 @@ function _add_net_revenue_totals!(dfNetRevenue::DataFrame)
         :Fixed_Subsidy_charge_MW,
     )
 
+    if :StorageThroughputCost in propertynames(dfNetRevenue)
+        cost_columns = (cost_columns..., :StorageThroughputCost)
+    end
+
     dfNetRevenue.Revenue = _sum_net_revenue_columns(dfNetRevenue, revenue_columns)
     dfNetRevenue.Cost = _sum_net_revenue_columns(dfNetRevenue, cost_columns) .-
                         _sum_net_revenue_columns(dfNetRevenue, fixed_subsidy_columns)
@@ -350,6 +354,10 @@ function write_net_revenue(path::AbstractString,
         dfNetRevenue.CapacityPaymentRevenue = capacity_payment_reported_revenue(EP, inputs) .* monetary_scale_factor
     end
 
+    if haskey(EP, :eStorageThroughputCost)
+        dfNetRevenue.StorageThroughputCost =
+            [value(EP[:eStorageThroughputCost][y]) * monetary_scale_factor for y in 1:G]
+    end
     _add_net_revenue_totals!(dfNetRevenue)
 
     CSV.write(joinpath(path, "NetRevenue.csv"), dfNetRevenue)

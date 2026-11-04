@@ -41,6 +41,7 @@ function load_inputs(setup::Dict, path::AbstractString)
     load_fuels_data!(setup, path, inputs)
     # Read in generator/resource related inputs
     load_resources_data!(inputs, setup, path, resources_path)
+    load_storage_throughput_cost!(setup, path, inputs)
     if setup["CapacityMix"] == 1
         load_capacity_mix!(setup, path, inputs)
     end

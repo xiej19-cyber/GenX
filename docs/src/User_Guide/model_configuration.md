@@ -28,7 +28,7 @@ The following tables summarize the model settings parameters and their default/p
 ||1 = constraints account for energy lost. |
 |TimeDomainReduction | 1 = Use time domain reduced inputs available in the folder with the name defined by settings parameter `TimeDomainReductionFolder`. If such a folder does not exist or it is empty, time domain reduction will reduce the input data and save the results there.|
 ||0 = Use the data in the main case folder; do not perform clustering.|
-|VirtualChargeDischargeCost | Hypothetical cost of charging and discharging storage resources (in USD/MWh).|
+|VirtualChargeDischargeCost | Cost of virtual reserve charging/discharging (in USD/MWh); does not price actual storage throughput.|
 |StorageVirtualDischarge | Flag to enable contributions that a storage device makes to the capacity reserve margin without generating power.|
 ||1 = activate the virtual discharge of storage resources.|
 ||0 = do not activate the virtual discharge of storage resources.|
@@ -162,3 +162,39 @@ The following tables summarize the model settings parameters and their default/p
 |TimeDomainReductionFolder | Name of the folder inside the current working directory where time domain reduced input data is stored.|
 
 The next step in configuring a GenX model is to specify the solver settings parameters using a `[solver_name]_settings.yml` file inside the `settings` folder. The solver settings parameters are solver specific and are described in the following section.
+
+
+### Resource-level storage throughput prices
+
+Actual storage throughput accounting is always active. In `resources/Storage.csv`, add
+`Charge_Cost_per_MWh` and `Discharge_Cost_per_MWh` to each resource row. Co-located
+storage uses the same columns in `resources/Vre_stor.csv`. Prices can differ by resource
+and between charging and discharging; fill unused rows with explicit zeros.
+
+```csv
+Resource,Charge_Cost_per_MWh,Discharge_Cost_per_MWh
+example_storage,0.1,0.1
+```
+
+These are **additional** throughput costs, separate from existing variable O&M. Use
+unscaled currency/MWh, in the same currency as other input costs. The normal resource
+loader scales these fields once with `ParameterScale`; do not manually scale them.
+Set both prices to zero to disable the surcharge for a resource. There is no setting
+switch and no separate price file. Missing prices, blanks, negative or nonfinite values
+are errors for storage resources. The old `StorageThroughputCost` setting and
+`system/Storage_throughput_cost.csv` are ignored with a warning if present.
+
+The fee is charge_price × actual charging MWh + discharge_price × actual discharging
+MWh. It includes standalone and co-located AC/DC storage, using AC-equivalent DC
+energy, and excludes virtual reserve flows. SOC conservation, representative-period
+boundaries and physical operating constraints remain unchanged. It adds no integer
+variables and does not enforce strict charge/discharge exclusivity. Negative prices,
+minimum generation or reserve requirements can still justify overlapping operation.
+
+The fee is included once in `costs.csv` under `cVar` and in its zonal totals; it is also
+reported separately as `StorageThroughputCost` in `NetRevenue.csv` and deducted from
+profit. With cost outputs enabled, `storage_throughput.csv` reports weighted annual
+charging, discharging, overlap and costs even when the resource prices are zero.
+`Overlap_MWh` counts each matched input/output MWh once, using
+`sum(weight * min(charge, discharge))`; it is neither useful net discharge nor an
+additional energy loss to add to losses.

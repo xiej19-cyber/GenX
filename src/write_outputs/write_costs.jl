@@ -47,6 +47,9 @@ function write_costs(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
     if setup["CapacityReserveMargin"] > 0 && !isempty(inputs["STOR_ALL"])
         cVar += value(EP[:eTotalCVarIn_virtual]) + value(EP[:eTotalCVarOut_virtual])
     end
+    if haskey(EP, :eTotalCStorageThroughput)
+        cVar += value(EP[:eTotalCStorageThroughput])
+    end
     cFix = value(EP[:eTotalCFix]) +
            (!isempty(inputs["STOR_ALL"]) ? value(EP[:eTotalCFixEnergy]) : 0.0) +
            (!isempty(inputs["STOR_ASYMMETRIC"]) ? value(EP[:eTotalCFixCharge]) : 0.0)
@@ -223,6 +226,9 @@ function write_costs(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
         tempCTotal += eCFix
 
         tempCVar = sum(value.(EP[:eCVar_out][Y_ZONE, :]))
+        if haskey(EP, :eStorageThroughputCost)
+            tempCVar += sum(value(EP[:eStorageThroughputCost][y]) for y in Y_ZONE; init = 0.0)
+        end
         tempCTotal += tempCVar
 
         tempCFuel = sum(value.(EP[:ePlantCFuelOut][Y_ZONE, :]))
@@ -415,4 +421,39 @@ function write_costs(path::AbstractString, inputs::Dict, setup::Dict, EP::Model)
         dfCost[!, Symbol("Zone$z")] = temp_cost_list
     end
     CSV.write(joinpath(path, "costs.csv"), dfCost)
+    write_storage_throughput(path, inputs, setup, EP)
+end
+
+"""Actual storage energy and simultaneous-flow diagnostics; overlap counts each matched MWh once."""
+function write_storage_throughput(path, inputs, setup, EP)
+    haskey(EP, :eStorageThroughputCost) || return nothing
+    scale = setup["ParameterScale"] == 1 ? ModelScalingFactor : 1
+    ids = sort(union(get(inputs, "STOR_ALL", Int[]), get(inputs, "VS_STOR", Int[])))
+    gen, omega = inputs["RESOURCES"], inputs["omega"]
+    rows = NamedTuple[]
+    standalone = Set(get(inputs, "STOR_ALL", Int[]))
+    for y in ids
+        charge, discharge = zeros(inputs["T"]), zeros(inputs["T"])
+        if y in standalone
+            charge .= [value(EP[:vCHARGE][y, t]) for t in 1:inputs["T"]]
+            discharge .= [value(EP[:vP][y, t]) for t in 1:inputs["T"]]
+        else
+            for (set, variable, target, factor) in (
+                    ("VS_STOR_DC_CHARGE", :vP_DC_CHARGE, charge, 1 / etainverter(gen[y])),
+                    ("VS_STOR_DC_DISCHARGE", :vP_DC_DISCHARGE, discharge, etainverter(gen[y])),
+                    ("VS_STOR_AC_CHARGE", :vP_AC_CHARGE, charge, 1.0),
+                    ("VS_STOR_AC_DISCHARGE", :vP_AC_DISCHARGE, discharge, 1.0))
+                if y in get(inputs, set, Int[])
+                    target .+= [factor * value(EP[variable][y, t]) for t in 1:inputs["T"]]
+                end
+            end
+        end
+        push!(rows, (Resource = resource_name(gen[y]), Zone = zone_id(gen[y]),
+            Charge_MWh = scale * sum(omega .* charge),
+            Discharge_MWh = scale * sum(omega .* discharge),
+            Overlap_MWh = scale * sum(omega .* min.(charge, discharge)),
+            ThroughputCost = scale^2 * value(EP[:eStorageThroughputCost][y])))
+    end
+    isempty(rows) || CSV.write(joinpath(path, "storage_throughput.csv"), DataFrame(rows))
+    return nothing
 end

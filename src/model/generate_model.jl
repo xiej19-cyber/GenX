@@ -344,6 +344,8 @@ function generate_model(setup::Dict, inputs::Dict, OPTIMIZER::MOI.OptimizerWithA
         hydrogen_demand!(EP, inputs, setup)
     end
 
+    storage_throughput_cost!(EP, inputs, setup)
+
     if setup["ModelingToGenerateAlternatives"] == 1
         mga!(EP, inputs, setup)
     end

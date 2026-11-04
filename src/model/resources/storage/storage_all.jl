@@ -269,3 +269,38 @@ function storage_all_operation!(EP::Model, inputs::Dict, setup::Dict)
         [y in STOR_ALL, t in 1:T],
         expr[y, t]<=vS[y, hoursbefore(p, t, 1)] * efficiency_down(gen[y]))
 end
+
+"""Charge a linear fee on actual storage input/output, including co-located storage.
+
+DC paths use their AC-equivalent energy, consistent with the existing VOM accounting.
+Virtual reserve flows are excluded; the existing physical operating constraints are unchanged.
+"""
+function storage_throughput_cost!(EP::Model, inputs::Dict, setup::Dict)
+    charge_rate, discharge_rate = storage_throughput_rates(inputs, setup)
+    isempty(get(inputs, "STOR_ALL", Int[])) && isempty(get(inputs, "VS_STOR", Int[])) && return nothing
+    G, T = inputs["G"], inputs["T"]
+    omega = inputs["omega"]
+    create_empty_expression!(EP, :eStorageThroughputCharge, G)
+    create_empty_expression!(EP, :eStorageThroughputDischarge, G)
+    charge, discharge = EP[:eStorageThroughputCharge], EP[:eStorageThroughputDischarge]
+    for y in get(inputs, "STOR_ALL", Int[]), t in 1:T
+        add_to_expression!(charge[y], omega[t], EP[:vCHARGE][y, t])
+        add_to_expression!(discharge[y], omega[t], EP[:vP][y, t])
+    end
+    gen = inputs["RESOURCES"]
+    for (set, variable, target, dc_charge, dc_discharge) in (
+            ("VS_STOR_DC_CHARGE", :vP_DC_CHARGE, charge, true, false),
+            ("VS_STOR_DC_DISCHARGE", :vP_DC_DISCHARGE, discharge, false, true),
+            ("VS_STOR_AC_CHARGE", :vP_AC_CHARGE, charge, false, false),
+            ("VS_STOR_AC_DISCHARGE", :vP_AC_DISCHARGE, discharge, false, false))
+        for y in get(inputs, set, Int[]), t in 1:T
+            factor = dc_charge ? 1 / etainverter(gen[y]) :
+                     dc_discharge ? etainverter(gen[y]) : 1.0
+            add_to_expression!(target[y], omega[t] * factor, EP[variable][y, t])
+        end
+    end
+    @expression(EP, eStorageThroughputCost[y = 1:G], charge_rate[y] * charge[y] + discharge_rate[y] * discharge[y])
+    @expression(EP, eTotalCStorageThroughput, sum(eStorageThroughputCost))
+    add_to_expression!(EP[:eObj], eTotalCStorageThroughput)
+    return nothing
+end

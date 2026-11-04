@@ -124,6 +124,8 @@ function scale_resources_data!(resource_in::DataFrame, scale_factor::Float64)
         :fixed_subsidy_charge_per_mwyr, # to $M/GW/yr
         :var_om_cost_per_mwh,           # to $M/GWh
         :var_om_cost_per_mwh_in,        # to $M/GWh
+        :charge_cost_per_mwh,           # actual storage throughput, to $M/GWh
+        :discharge_cost_per_mwh,        # actual storage throughput, to $M/GWh
         :reg_cost,                      # to $M/GW
         :rsv_cost,                      # to $M/GW
         :min_retired_cap_mw,            # to GW
@@ -298,6 +300,7 @@ function load_resource_df(path::AbstractString, scale_factor::Float64, resource_
     resource_in = load_dataframe(path)
     # rename columns lowercase for internal consistency
     rename!(resource_in, lowercase.(names(resource_in)))
+    validate_storage_throughput_columns(resource_in, resource_type)
     scale_resources_data!(resource_in, scale_factor)
     # scale vre_stor columns if necessary
     resource_type == VreStorage && scale_vre_stor_data!(resource_in, scale_factor) 

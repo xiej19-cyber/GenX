@@ -271,4 +271,9 @@ end
     @test df.Revenue == [10.0, 20.0]
     @test df.Cost == [46.5, 61.0]
     @test df.Profit == [-36.5, -41.0]
+
+    df.StorageThroughputCost = [5.0, 7.0]
+    GenX._add_net_revenue_totals!(df)
+    @test df.Cost == [51.5, 68.0]
+    @test df.Profit == [-41.5, -48.0]
 end
