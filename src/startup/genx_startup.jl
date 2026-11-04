@@ -57,29 +57,30 @@ function _precompile()
         warnerror_logger = ConsoleLogger(stderr, Logging.Warn)
         with_logger(warnerror_logger) do
             @compile_workload begin
-                case = joinpath(pkgdir(GenX), "precompile/case")
-                _precompile_tdr(case)   # Precompile TDR
-                run_genx_case!(case, HiGHS.Optimizer)   # Precompile run_genx_case!
+                mktempdir() do workdir
+                    case = joinpath(workdir, "case")
+                    cp(joinpath(pkgdir(GenX), "precompile/case"), case)
+                    # Older bundled fixtures predate explicit throughput prices.
+                    for filename in ("Storage.csv", "Vre_stor.csv")
+                        file = joinpath(case, "resources", filename)
+                        isfile(file) || continue
+                        data = CSV.read(file, DataFrame)
+                        for column in (:Charge_Cost_per_MWh, :Discharge_Cost_per_MWh)
+                            column in propertynames(data) ||
+                                (data[!, column] = zeros(nrow(data)))
+                        end
+                        CSV.write(file, data)
+                    end
+                    # TDR is optional and is not part of the import-time workload.
+                    run_genx_case!(case, HiGHS.Optimizer)
+                end
             end
         end
     end
-    isdir("precompile/case/results") &&
-        rm("precompile/case/results"; force = true, recursive = true)   # Clean up
-    return nothing
-end
-
-function _precompile_tdr(case)
-    settings_path = get_settings_path(case)
-    setup = configure_settings(get_settings_path(case, "genx_settings.yml"),
-        get_settings_path(case, "output_settings.yml"))
-    setup["TimeDomainReduction"] = 1    # Enable TDR for precompilation
-    cluster_inputs(case, settings_path, setup)
-    isdir("precompile/case/TDR_results") &&
-        rm("precompile/case/TDR_results"; force = true, recursive = true)   # Clean up
     return nothing
 end
 
 # Precompile `run_genx_case!` and `TDR` unless the environment variable `GENX_PRECOMPILE` is set to `false`
-if get(ENV, "GENX_PRECOMPILE", "true") != "false"
+if get(ENV, "GENX_PRECOMPILE", "false") != "false"
     _precompile()
 end
